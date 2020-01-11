@@ -1,6 +1,5 @@
 use std::collections::HashMap;
-
-
+use std::str::Chars;
 
 pub enum InstructionResult {
     EvaluateNext,
@@ -72,8 +71,6 @@ impl GwExpression for GwVariableExpression {
     }
 }
 
-
-
 pub struct ProgramLine {
     line : u16,
     instruction : Box<dyn GwInstruction>,
@@ -84,7 +81,6 @@ impl ProgramLine {
     fn eval (&self, context : &mut EvaluationContext) -> InstructionResult {
          self.instruction.eval(context)
     }
-
 }
 
 
@@ -135,11 +131,75 @@ impl GwProgram {
                 InstructionResult::EvaluateEnd => {
                     break;
                 }
-            }
-            
+            }            
         }
     }
 }
+
+
+struct PushbackCharsIterator<'a> {
+    chars : Chars<'a>,
+    pushed_back: Option<char>
+}
+impl PushbackCharsIterator<'_> {
+    fn next(&mut self) -> Option<char> {
+        if let Some(pushed) = self.pushed_back {
+            self.pushed_back = None;
+            Some(pushed)
+        } else {
+            self.chars.next()
+        }
+    }
+
+    fn push_back(&mut self, char_to_push : char) {
+        self.pushed_back = Some(char_to_push);
+    }
+}
+
+fn consume_whitespace<'a>(iterator : &mut PushbackCharsIterator<'a>) {
+    loop {
+        if let Some(c) = iterator.next() {
+            if c != ' ' {
+                iterator.push_back(c);
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+}
+
+fn recognize_int_number_str<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Option<u16> {
+    if let Some(c) = iterator.next()  {
+        if c.is_digit(10) {
+            let mut tmp_string = String::new();
+            tmp_string.push(c);
+            loop {
+                if let Some(c) = iterator.next() {
+                    if (c.is_digit(10)) {
+                        tmp_string.push(c);                        
+                    } else {
+                        iterator.push_back(c);
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+            if let Ok(result) = u16::from_str_radix(&tmp_string.to_string(), 10) {
+                Some(result)
+            } else {
+                None
+            }
+        } else {
+            iterator.push_back(c);
+            None
+        }
+    } else {
+        None
+    }
+}
+
 
 #[cfg(test)]
 mod eval_tests {
@@ -194,8 +254,67 @@ mod eval_tests {
 
 #[cfg(test)]
 mod parser_tests {
+    use crate::gwparser::PushbackCharsIterator;
+    use crate::gwparser::consume_whitespace;
+    use crate::gwparser::recognize_int_number_str;
+
+
     #[test]
-    fn it_tests() {
-        assert_eq!(23,23);
+    fn it_pushes_back() {
+        let str = "abc";
+        let mut pb = PushbackCharsIterator {
+            chars: str.chars(),
+            pushed_back: None
+        };
+
+        if let Some(first) = pb.next() {
+            assert_eq!('a', first);
+        } else {
+            assert!(false, "first character")
+        }
+
+        if let Some(second) = pb.next() {
+            assert_eq!('b', second);
+        } else {
+            assert!(false, "second character")
+        }
+
+        pb.push_back('x');
+        
+        if let Some(third) = pb.next() {
+            assert_eq!('x', third);
+        } else {
+            assert!(false, "pushed character")
+        }
+
+        if let Some(fourth) = pb.next() {
+            assert_eq!('c', fourth);
+        } else {
+            assert!(false, "fourth character")
+        }
+
+        match pb.next() {
+            Some(_) => assert!(false),
+            None => assert!(true)
+        }
+    }
+
+
+    #[test]
+    fn it_identifies_numbers() {
+        let str = "10 20 30";
+        let mut pb = PushbackCharsIterator {
+            chars: str.chars(),
+            pushed_back: None
+        };
+
+        match (recognize_int_number_str(&mut pb),
+               consume_whitespace(&mut pb),
+               recognize_int_number_str(&mut pb),
+               consume_whitespace(&mut pb),
+               recognize_int_number_str(&mut pb)) {
+            (Some(10), _, Some(20), _, Some(30)) => assert!(true),
+            _ => assert!(false)
+        }
     }
 }
