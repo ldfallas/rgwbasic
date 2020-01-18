@@ -1,3 +1,4 @@
+
 use std::collections::HashMap;
 use std::str::Chars;
 
@@ -68,6 +69,31 @@ impl GwExpression for GwVariableExpression {
             // TODO we need to define a variable here???
             ExpressionEvalResult::IntegerResult(0)
         }
+    }
+}
+
+
+pub enum GwBinaryOperationKind {
+    Plus,
+    Minus,
+    Times,
+    Div,
+    And,
+    Or
+}
+
+
+pub struct GwBinaryOperation {
+    kind: GwBinaryOperationKind,
+    left: Box<dyn GwExpression>,
+    right: Box<dyn GwExpression>
+}
+
+impl GwExpression for GwBinaryOperation {
+    fn eval (&self, context : &mut EvaluationContext) -> ExpressionEvalResult {
+        let left_result = self.left.eval(context);
+        let right_result = self.left.eval(context);
+        panic!("Not implemented");
     }
 }
 
@@ -169,6 +195,62 @@ fn consume_whitespace<'a>(iterator : &mut PushbackCharsIterator<'a>) {
     }
 }
 
+fn recognize_specific_char<'a>(iterator : &mut PushbackCharsIterator<'a>, c : char) -> bool {
+    if let Some(next_char) = iterator.next()  {
+        (next_char == c)
+    } else {
+        false 
+    }    
+}
+
+fn recognize_word<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Option<String> {
+    if let Some(next_char) = iterator.next() {
+        if next_char.is_alphabetic() {
+            let mut result = String::new();
+            result.push(next_char);
+            loop {
+                if let Some(next_char) = iterator.next() {
+                    if next_char.is_alphabetic()
+                        || next_char.is_digit(10) {
+                       result.push(next_char);
+                    } else {
+                        iterator.push_back(next_char);
+                        return Some(result);
+                    }
+                } else {
+                    return Some(result);
+                }
+            }
+        } else {
+            iterator.push_back(next_char);
+        }
+    }
+    None
+}
+
+fn recognize_string_literal<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Option<String> {
+    if let Some(next_char) = iterator.next() {
+        if next_char == '"' {
+            let mut result = String::new();
+            result.push(next_char);
+            loop {
+                if let Some(next_char) = iterator.next() {
+                    result.push(next_char);
+                    if next_char == '"' {
+                       return Some(result);
+                    }
+                } else {
+                    return Some(result);
+                }
+            }
+        } else {
+            iterator.push_back(next_char);
+        }
+    }
+    None
+}
+
+
 fn recognize_int_number_str<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Option<u16> {
     if let Some(c) = iterator.next()  {
         if c.is_digit(10) {
@@ -176,7 +258,7 @@ fn recognize_int_number_str<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Op
             tmp_string.push(c);
             loop {
                 if let Some(c) = iterator.next() {
-                    if (c.is_digit(10)) {
+                    if c.is_digit(10) {
                         tmp_string.push(c);                        
                     } else {
                         iterator.push_back(c);
@@ -257,6 +339,7 @@ mod parser_tests {
     use crate::gwparser::PushbackCharsIterator;
     use crate::gwparser::consume_whitespace;
     use crate::gwparser::recognize_int_number_str;
+    use crate::gwparser::recognize_word;
 
 
     #[test]
@@ -317,4 +400,27 @@ mod parser_tests {
             _ => assert!(false)
         }
     }
+
+    #[test]
+    fn it_identifies_identifiers() {
+        let str = "werwe10    Excs    AJLAKJ";
+        let mut pb = PushbackCharsIterator {
+            chars: str.chars(),
+            pushed_back: None
+        };
+
+        match (recognize_word(&mut pb),
+               consume_whitespace(&mut pb),
+               recognize_word(&mut pb),
+               consume_whitespace(&mut pb),
+               recognize_word(&mut pb)) {
+            (Some(w1), _, Some(w2), _, Some(w3))
+                if w1.eq(&String::from("werwe10"))
+                   && w2.eq(&String::from("Excs"))
+                   && w3.eq(&String::from("AJLAKJ"))
+              => assert!(true),
+            _ => assert!(false)
+        }
+    }
+
 }
