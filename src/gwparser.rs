@@ -77,9 +77,21 @@ pub enum GwBinaryOperationKind {
     Plus,
     Minus,
     Times,
-    Div,
+    FloatDiv,
+    IntDiv,
+    LessThan,
+    LessEqualThan,
+    GreaterThan,
+    GreaterEqualThan,
+    Equal,
+    Different,
+    Exponent,
+    Mod,             
     And,
-    Or
+    Or,
+    Eqv,
+    Xor,
+    Implication   
 }
 
 
@@ -96,6 +108,7 @@ impl GwExpression for GwBinaryOperation {
         panic!("Not implemented");
     }
 }
+
 
 pub struct ProgramLine {
     line : u16,
@@ -163,7 +176,7 @@ impl GwProgram {
 }
 
 
-struct PushbackCharsIterator<'a> {
+pub struct PushbackCharsIterator<'a> {
     chars : Chars<'a>,
     pushed_back: Option<char>
 }
@@ -201,6 +214,31 @@ fn recognize_specific_char<'a>(iterator : &mut PushbackCharsIterator<'a>, c : ch
     } else {
         false 
     }    
+}
+
+fn recognize_operator<'a>(iterator : &mut PushbackCharsIterator<'a>)
+                          -> ParserResult<GwBinaryOperationKind> {
+    match iterator.next() {
+        Some(the_char) => {
+            if the_char.is_alphabetic() {
+                iterator.push_back(the_char);
+                if let Some(operator_name) = recognize_word(iterator) {
+                    match operator_name[..] {
+                        _ => return  ParserResult::Error(String::from("Error expecting AND, OR, XOR, IMP, etc"))
+                    } 
+                } else {
+                    return  ParserResult::Error(String::from("Error expecting alphabetic operator"));
+                }
+            } else {
+                match the_char {
+                    '+' => ParserResult::Success(GwBinaryOperationKind::Plus),
+                    '-' => ParserResult::Success(GwBinaryOperationKind::Minus),
+                    _ => ParserResult::Nothing    
+                }                    
+            }
+        }
+        None => ParserResult::Nothing
+    }
 }
 
 fn recognize_word<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Option<String> {
@@ -280,6 +318,53 @@ fn recognize_int_number_str<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Op
     } else {
         None
     }
+}
+
+
+pub enum ParserResult<T> {
+    Success(T),
+    Error(String),
+    Nothing
+}
+
+pub fn parse_multiplicative_expression<'a>(iterator : &mut PushbackCharsIterator<'a>)
+                                           -> ParserResult<Box<dyn GwExpression>> {
+    panic!("Not implemented");
+}
+
+pub fn parse_additive_expression<'a>(iterator : &mut PushbackCharsIterator<'a>)
+                                     -> ParserResult<Box<dyn GwExpression>> {
+
+    match parse_multiplicative_expression(iterator) {
+        ParserResult::Success(left_side_parse_result) => {
+            consume_whitespace(iterator);
+            if recognize_specific_char(iterator, '+') || recognize_specific_char(iterator, '-') {
+                if let ParserResult::Success(right_side_parse_result) = parse_multiplicative_expression(iterator) {
+                    return ParserResult::Success(
+                        Box::new(
+                            GwBinaryOperation {
+                                kind: GwBinaryOperationKind::Plus,
+                                left: left_side_parse_result,
+                                right: right_side_parse_result }));
+                } else {
+                    ParserResult::Error(String::from("Error parsing additive expression, expecting right side operand "))
+                }
+            } else {
+                ParserResult::Success(left_side_parse_result)
+            }
+        },
+        ParserResult::Nothing => {
+            ParserResult::Nothing
+        }        
+        ParserResult::Error(msg) => {
+            ParserResult::Error(msg)
+        }
+    }
+}
+
+pub fn parse_expression<'a>(iterator : &mut PushbackCharsIterator<'a>)
+                            -> ParserResult<Box<dyn GwExpression>> {
+    return parse_additive_expression(iterator);
 }
 
 
