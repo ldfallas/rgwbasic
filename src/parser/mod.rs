@@ -1,4 +1,5 @@
 
+use crate::tokens;
 use std::collections::HashMap;
 use std::str::Chars;
 
@@ -176,6 +177,7 @@ impl GwProgram {
 }
 
 
+
 pub struct PushbackCharsIterator<'a> {
     chars : Chars<'a>,
     pushed_back: Option<char>
@@ -194,6 +196,16 @@ impl PushbackCharsIterator<'_> {
         self.pushed_back = Some(char_to_push);
     }
 }
+
+enum GwToken<'a> {
+    Keyword(&'a tokens::GwBasicToken),
+    Identifier(String),
+    StringTok(String),
+    Comma,
+    Colon
+}
+
+
 
 fn consume_whitespace<'a>(iterator : &mut PushbackCharsIterator<'a>) {
     loop {
@@ -321,6 +333,38 @@ fn recognize_int_number_str<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Op
 }
 
 
+struct PushbackTokensIterator<'a, 'b> {
+    chars_iterator: PushbackCharsIterator<'a>,
+    tokens_info: tokens::GwTokenInfo,
+    pushed_back: Option<GwToken<'b>>
+}
+
+impl<'b> PushbackTokensIterator<'_, 'b> {
+    fn create<'a>(chars_iterator : PushbackCharsIterator<'a>) -> PushbackTokensIterator<'a, 'b> {
+        PushbackTokensIterator {
+            chars_iterator: chars_iterator,
+            tokens_info: tokens::GwTokenInfo::create(),
+            pushed_back: None
+        }
+    }
+    fn next(&mut self) -> Option<GwToken> {
+        consume_whitespace(&mut self.chars_iterator);
+        if let Some(word) = recognize_word(&mut self.chars_iterator) {
+            if let Some(kw) =  self.tokens_info.get_token(&word) {
+                return Some(GwToken::Keyword(kw))
+            } else {
+                return Some(GwToken::Identifier(word));
+            }
+        }
+        panic!("Not implemented!");
+    }
+
+    fn push_back(&mut self, tok_to_push : GwToken<'b>) {
+        self.pushed_back = Some(tok_to_push);
+    }
+}
+
+
 pub enum ParserResult<T> {
     Success(T),
     Error(String),
@@ -330,6 +374,12 @@ pub enum ParserResult<T> {
 pub fn parse_multiplicative_expression<'a>(iterator : &mut PushbackCharsIterator<'a>)
                                            -> ParserResult<Box<dyn GwExpression>> {
     panic!("Not implemented");
+}
+
+
+fn parse_operator_two<'a>(iterator : &mut PushbackCharsIterator<'a>, op1 : char, op2 : char)
+                      -> ParserResult<Box<GwBinaryOperationKind>> {
+   panic!("!!!");
 }
 
 pub fn parse_additive_expression<'a>(iterator : &mut PushbackCharsIterator<'a>)
@@ -372,12 +422,13 @@ pub fn parse_expression<'a>(iterator : &mut PushbackCharsIterator<'a>)
 mod eval_tests {
     use std::collections::HashMap;
     
-    use crate::gwparser::GwAssign;
-    use crate::gwparser::GwIntegerLiteral;
-    use crate::gwparser::ProgramLine;
-    use crate::gwparser::GwProgram;
-    use crate::gwparser::EvaluationContext;
-    use crate::gwparser::ExpressionEvalResult;
+    // use crate::gwparser::GwAssign;
+    // use crate::gwparser::GwIntegerLiteral;
+    // use crate::gwparser::ProgramLine;
+    // use crate::gwparser::GwProgram;
+    // use crate::gwparser::EvaluationContext;
+    // use crate::gwparser::ExpressionEvalResult;
+    use crate::parser::*;
 
     
     #[test]
@@ -421,10 +472,11 @@ mod eval_tests {
 
 #[cfg(test)]
 mod parser_tests {
-    use crate::gwparser::PushbackCharsIterator;
-    use crate::gwparser::consume_whitespace;
-    use crate::gwparser::recognize_int_number_str;
-    use crate::gwparser::recognize_word;
+    // use crate::gwparser::PushbackCharsIterator;
+    // use crate::gwparser::consume_whitespace;
+    // use crate::gwparser::recognize_int_number_str;
+    // use crate::gwparser::recognize_word;
+    use crate::parser::*;
 
 
     #[test]
