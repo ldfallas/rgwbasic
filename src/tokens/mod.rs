@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 
 #[derive(Debug)]
+#[derive(PartialEq)]
 pub enum GwBasicToken {
    EndTok,
    ForTok,
