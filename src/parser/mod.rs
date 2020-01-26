@@ -114,6 +114,16 @@ pub struct GwBinaryOperation {
     right: Box<dyn GwExpression>
 }
 
+impl GwBinaryOperation {
+   fn fill_operator(&self, buffer : &mut String) {
+        match self.kind {
+            GwBinaryOperationKind::Plus => buffer.push_str(" + "),
+            GwBinaryOperationKind::Times => buffer.push_str(" * "),
+            _ => buffer.push_str(" ?? ")
+        }
+    }
+}
+
 impl GwExpression for GwBinaryOperation {
     fn eval (&self, context : &mut EvaluationContext) -> ExpressionEvalResult {
         let left_result = self.left.eval(context);
@@ -123,11 +133,12 @@ impl GwExpression for GwBinaryOperation {
     fn fill_structure_string(&self,   val : &mut String) {
         val.push_str("(");
         self.left.fill_structure_string(val);
-        val.push_str(" + ");
+        self.fill_operator(val);
         self.right.fill_structure_string(val);        
         val.push_str(")");
     }
 }
+ 
 
 
 pub struct ProgramLine {
@@ -216,14 +227,15 @@ impl PushbackCharsIterator<'_> {
     }
 }
 
-enum GwToken<'a> {
-    Keyword(&'a tokens::GwBasicToken),
+#[derive(Clone)]
+pub enum GwToken {
+    Keyword(tokens::GwBasicToken),
     Identifier(String),
     StringTok(String),
+    Integer(i16),
     Comma,
     Colon
 }
-
 
 
 fn consume_whitespace<'a>(iterator : &mut PushbackCharsIterator<'a>) {
@@ -241,7 +253,11 @@ fn consume_whitespace<'a>(iterator : &mut PushbackCharsIterator<'a>) {
 
 fn recognize_specific_char<'a>(iterator : &mut PushbackCharsIterator<'a>, c : char) -> bool {
     if let Some(next_char) = iterator.next()  {
-        (next_char == c)
+        let result = (next_char == c);
+        if !result {
+           iterator.push_back(next_char);
+        }
+        result
     } else {
         false 
     }    
@@ -330,7 +346,7 @@ fn recognize_string_literal<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Op
 }
 
 
-fn recognize_int_number_str<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Option<u16> {
+fn recognize_int_number_str<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Option<i16> {
     if let Some(c) = iterator.next()  {
         if c.is_digit(10) {
             let mut tmp_string = String::new();
@@ -347,7 +363,7 @@ fn recognize_int_number_str<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Op
                     break;
                 }
             }
-            if let Ok(result) = u16::from_str_radix(&tmp_string.to_string(), 10) {
+            if let Ok(result) = i16::from_str_radix(&tmp_string.to_string(), 10) {
                 Some(result)
             } else {
                 None
@@ -362,14 +378,14 @@ fn recognize_int_number_str<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Op
 }
 
 
-pub struct PushbackTokensIterator<'a, 'b> {
+pub struct PushbackTokensIterator<'a> {
     chars_iterator: PushbackCharsIterator<'a>,
     tokens_info: tokens::GwTokenInfo,
-    pushed_back: Option<&'b GwToken<'b>>
+    pushed_back: Option<GwToken>
 }
 
-impl<'b> PushbackTokensIterator<'_, 'b> {
-    fn create<'a>(chars_iterator : PushbackCharsIterator<'a>) -> PushbackTokensIterator<'a, 'b> {
+impl<'a> PushbackTokensIterator<'a> {
+    fn create(chars_iterator : PushbackCharsIterator<'a>) -> PushbackTokensIterator<'a> {
         PushbackTokensIterator {
             chars_iterator: chars_iterator,
             tokens_info: tokens::GwTokenInfo::create(),
@@ -378,28 +394,36 @@ impl<'b> PushbackTokensIterator<'_, 'b> {
     }
     
     fn next(&mut self) -> Option<GwToken> {
-/*        if let Some(pushed) =  self.pushed_back {
+
+        // TODO interesting how to accomplish the
+        // following code without clonning the token
+        if let Some(pushed) = &self.pushed_back {
+            let copy = pushed.clone();
             self.pushed_back = None;
-            return Some(*pushed);
-        }*/
+            return Some(copy);
+        }
         
         consume_whitespace(&mut self.chars_iterator);
         if let Some(word) = recognize_word(&mut self.chars_iterator) {
             if let Some(kw) =  self.tokens_info.get_token(&word) {
-                return Some(GwToken::Keyword(kw))
+                return Some(GwToken::Keyword(kw.clone()))
             } else {
                 return Some(GwToken::Identifier(word));
             }
+        } else if let Some(int_number) = recognize_int_number_str(&mut self.chars_iterator) {
+            return Some(GwToken::Integer(int_number));
         } else if recognize_specific_char(&mut self.chars_iterator, '+') {
-            return Some(GwToken::Keyword(&tokens::GwBasicToken::PlusTok));
+            return Some(GwToken::Keyword(tokens::GwBasicToken::PlusTok));
+        } else if recognize_specific_char(&mut self.chars_iterator, '*') {
+            return Some(GwToken::Keyword(tokens::GwBasicToken::TimesTok));            
         } else if recognize_eol(&mut self.chars_iterator) {
             return None;
         }
         panic!("Not implemented scenario of non recognized token!");
     }
 
-    fn push_back(&mut self, tok_to_push : &'b GwToken) {
-//        self.pushed_back = Some(tok_to_push);
+    pub fn push_back(&mut self, tok_to_push : GwToken) {
+        self.pushed_back = Some(tok_to_push);
     }
 }
 
@@ -410,11 +434,13 @@ pub enum ParserResult<T> {
     Nothing
 }
 
-pub fn parse_single_expression<'a, 'b>(iterator : &mut PushbackTokensIterator<'a, 'b>)
+pub fn parse_single_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
                                                -> ParserResult<Box<dyn GwExpression>> {
     if let Some(next_token) = iterator.next() {
         if let GwToken::Identifier(id) = next_token {
             ParserResult::Success(Box::new(GwVariableExpression { name: id}))
+        } else if let GwToken::Integer(i_val) = next_token {
+            ParserResult::Success(Box::new(GwIntegerLiteral { value: i_val}))                            
         } else {
             ParserResult::Error(String::from("??"))
         }
@@ -424,20 +450,16 @@ pub fn parse_single_expression<'a, 'b>(iterator : &mut PushbackTokensIterator<'a
 }
 
 
-fn parse_operator_two<'a>(iterator : &mut PushbackCharsIterator<'a>, op1 : char, op2 : char)
-                      -> ParserResult<Box<GwBinaryOperationKind>> {
-   panic!("!!!");
-}
 
-fn one_kw_token_of<'a, 'b>(token : &'b GwToken, t1 : &'a tokens::GwBasicToken, t2 : &'a tokens::GwBasicToken) -> Option<&'b tokens::GwBasicToken>{
+fn one_kw_token_of<'a>(token : &'a GwToken, t1 : &'a tokens::GwBasicToken, t2 : &'a tokens::GwBasicToken) -> Option<&'a tokens::GwBasicToken>{
     match token  {
-        GwToken::Keyword(tok) if **tok == *t1 || **tok == *t2 => Some(*tok),
+        GwToken::Keyword(tok) if *tok == *t1 || *tok == *t2 => Some(tok),
         _ => None
     }        
 }
 
 ////
-pub fn parse_multiplicative_expressions<'a, 'b>(iterator : &mut PushbackTokensIterator<'a, 'b>, current : Box<dyn GwExpression>)
+pub fn parse_multiplicative_expressions<'a>(iterator : &mut PushbackTokensIterator<'a>, current : Box<dyn GwExpression>)
                                           -> ParserResult<Box<dyn GwExpression>> {
 
   let mut current_expr = current;
@@ -456,7 +478,7 @@ pub fn parse_multiplicative_expressions<'a, 'b>(iterator : &mut PushbackTokensIt
                  return ParserResult::Error(String::from("Error parsing additive expression, expecting right side operand "));
              }
          } else {
-//             iterator.push_back(&next_token);
+             iterator.push_back(next_token);
              return ParserResult::Success(current_expr);
          }
      } else {
@@ -467,10 +489,8 @@ pub fn parse_multiplicative_expressions<'a, 'b>(iterator : &mut PushbackTokensIt
 
 
 
-pub fn parse_multiplicative_expression<'a, 'b>(iterator : &mut PushbackTokensIterator<'a, 'b>)
+pub fn parse_multiplicative_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
                                      -> ParserResult<Box<dyn GwExpression>> {
-
-    return parse_single_expression(iterator);
     match parse_single_expression(iterator) {
         ParserResult::Success(left_side_parse_result) => {
             return parse_multiplicative_expressions(iterator, left_side_parse_result);
@@ -487,7 +507,7 @@ pub fn parse_multiplicative_expression<'a, 'b>(iterator : &mut PushbackTokensIte
 ////
 
 
-pub fn parse_additive_expressions<'a, 'b>(iterator : &mut PushbackTokensIterator<'a, 'b>, current : Box<dyn GwExpression>)
+pub fn parse_additive_expressions<'a>(iterator : &mut PushbackTokensIterator<'a>, current : Box<dyn GwExpression>)
                                           -> ParserResult<Box<dyn GwExpression>> {
 
   let mut current_expr = current;
@@ -516,7 +536,7 @@ pub fn parse_additive_expressions<'a, 'b>(iterator : &mut PushbackTokensIterator
 
 
 
-pub fn parse_additive_expression<'a, 'b>(iterator : &mut PushbackTokensIterator<'a, 'b>)
+pub fn parse_additive_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
                                      -> ParserResult<Box<dyn GwExpression>> {
 
     match parse_multiplicative_expression(iterator) {
@@ -532,7 +552,7 @@ pub fn parse_additive_expression<'a, 'b>(iterator : &mut PushbackTokensIterator<
     }
 }
 
-pub fn parse_expression<'a, 'b>(iterator : &mut PushbackTokensIterator<'a, 'b>)
+pub fn parse_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
                             -> ParserResult<Box<dyn GwExpression>> {
     return parse_additive_expression(iterator);
 }
@@ -681,7 +701,31 @@ mod parser_tests {
             }
             _ => panic!("errror")
         }        
+    }
+
+    #[test]
+    fn it_parses_multiplicative_four() {
+        let str = "ab + bc + cd *  de";
+        let mut pb = PushbackCharsIterator {
+            chars: str.chars(),
+            pushed_back: None
+        };
+        // let mut tokens_iterator = PushbackTokensIterator {
+        //     chars_iterator: pb,
+        //     tokens_info: tokens::GwTokenInfo::create(),
+        //     pushed_back: None
+        // };
+        let mut tokens_iterator = PushbackTokensIterator::create(pb);
+        match parse_expression(&mut tokens_iterator) {
+            ParserResult::Success(expr) => {
+                let mut buf = String::new();
+                expr.fill_structure_string(&mut buf);
+                assert_eq!(buf, String::from("((ab + bc) + (cd * de))"));
+            }
+            _ => panic!("errror")
+        }        
     }     
+    
 
     #[test]
     fn it_identifies_numbers() {

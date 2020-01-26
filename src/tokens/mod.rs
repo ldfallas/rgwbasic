@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 #[derive(Debug)]
 #[derive(PartialEq)]
+#[derive(Clone)]
 pub enum GwBasicToken {
    EndTok,
    ForTok,
@@ -202,6 +203,8 @@ impl GwTokenInfo {
         dict.insert(String::from("END"), GwBasicToken::EndTok);
         dict.insert(String::from("+"), GwBasicToken::PlusTok);
         dict.insert(String::from("-"), GwBasicToken::MinusTok);
+        dict.insert(String::from("*"), GwBasicToken::TimesTok);
+        
         
         GwTokenInfo {
             token_text: dict
