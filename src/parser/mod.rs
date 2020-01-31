@@ -11,6 +11,7 @@ pub enum InstructionResult {
 
 pub trait GwInstruction {
     fn eval (&self, context : &mut EvaluationContext) -> InstructionResult;
+    fn fill_structure_string(&self,   buffer : &mut String);
 }
 
 #[derive(Clone)]
@@ -142,7 +143,7 @@ impl GwExpression for GwBinaryOperation {
 
 
 pub struct ProgramLine {
-    line : u16,
+    line : i16,
     instruction : Box<dyn GwInstruction>,
     rest_instructions : Option<Box<dyn GwInstruction>>
 }
@@ -150,6 +151,14 @@ pub struct ProgramLine {
 impl ProgramLine {
     fn eval (&self, context : &mut EvaluationContext) -> InstructionResult {
          self.instruction.eval(context)
+    }
+
+    fn fill_structure_string(&self,   buffer : &mut String) {
+        buffer.push('(');
+        buffer.push_str(&self.line.to_string()[..]);
+        buffer.push(' ');
+        self.instruction.fill_structure_string(buffer);
+        buffer.push(')');        
     }
 }
 
@@ -161,6 +170,10 @@ pub struct GwCls {
 impl GwInstruction for GwCls {
     fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
         InstructionResult::EvaluateNext
+    }
+
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str(&"CLS");
     }
 }
 
@@ -175,6 +188,12 @@ impl GwInstruction for GwAssign {
         context.set_variable(&self.variable, &expression_evaluation);
         InstructionResult::EvaluateNext
     }
+
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str(&self.variable[..]);
+        buffer.push_str(&" = ");
+        self.expression.fill_structure_string(buffer);
+    }    
 }
 
 pub struct GwProgram {
@@ -414,6 +433,9 @@ impl<'a> PushbackTokensIterator<'a> {
             return Some(GwToken::Integer(int_number));
         } else if recognize_specific_char(&mut self.chars_iterator, '+') {
             return Some(GwToken::Keyword(tokens::GwBasicToken::PlusTok));
+        } else if recognize_specific_char(&mut self.chars_iterator, '=') {
+            return Some(GwToken::Keyword(tokens::GwBasicToken::EqlTok));            
+            
         } else if recognize_specific_char(&mut self.chars_iterator, '*') {
             return Some(GwToken::Keyword(tokens::GwBasicToken::TimesTok));            
         } else if recognize_eol(&mut self.chars_iterator) {
@@ -557,6 +579,79 @@ pub fn parse_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
     return parse_additive_expression(iterator);
 }
 
+fn parse_assignment<'a>(iterator : &mut PushbackTokensIterator<'a>, identifier : String)
+                        -> ParserResult<Box<dyn GwInstruction>> {
+
+    if let Some(next_token)  = iterator.next() {
+        if let GwToken::Keyword(tokens::GwBasicToken::EqlTok) = next_token {
+            if let ParserResult::Success(expr) =  parse_expression(iterator) {
+                return ParserResult::Success(
+                    Box::new(
+                    GwAssign {
+                        variable: identifier,
+                        expression: expr
+                    }));
+            } else {
+                return ParserResult::Error(String::from("Error parsing  assignment"));
+            }
+        } else {
+            return ParserResult::Error(String::from("Expecting assignment"));
+        }
+    } else {
+        return ParserResult::Error(String::from("cannot parse assignment"));
+    }
+}
+
+fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserResult<Box<dyn GwInstruction>> {
+    if let Some(next_tok) = iterator.next() {
+        if let GwToken::Identifier(var_name) = next_tok {
+            return parse_assignment(iterator, var_name);
+        } else {
+            panic!("Not implemented parsing for non-assigment");
+        }
+    } else {
+        return ParserResult::Nothing;
+    }    
+}
+
+pub fn parse_instruction_line_from_string(line : String)
+                                          -> ParserResult<ProgramLine> {
+    
+    let mut pb = PushbackCharsIterator {
+        chars: line.chars(),
+        pushed_back: None
+    };
+    let mut tokens_iterator = PushbackTokensIterator {
+        chars_iterator: pb,
+        tokens_info: tokens::GwTokenInfo::create(),
+        pushed_back: None
+    };
+    parse_instruction_line(&mut tokens_iterator)
+}
+
+pub fn parse_instruction_line<'a>(iterator : &mut PushbackTokensIterator<'a>)
+                              -> ParserResult<ProgramLine> {
+    if let Some(next_tok) = iterator.next() {
+        if let GwToken::Integer(line_number) = next_tok {
+            if let ParserResult::Success(instr) = parse_instruction(iterator) {
+                return ParserResult::Success(
+                    ProgramLine {
+    line : line_number,
+    instruction : instr,
+    rest_instructions : None
+}
+                );
+            } else {
+                ParserResult::Error(String::from("Error parsing line"))
+            }
+        } else {
+            ParserResult::Error(String::from("line number expected"))
+        }
+    } else {
+        ParserResult::Nothing
+    }
+}
+
 
 #[cfg(test)]
 mod eval_tests {
@@ -680,6 +775,29 @@ mod parser_tests {
             _ => panic!("errror")
         }        
     }
+
+    #[test]
+    fn it_parses_assignment_instruction() {
+        let str = "10 x = ab";
+        let mut pb = PushbackCharsIterator {
+            chars: str.chars(),
+            pushed_back: None
+        };
+        let mut tokens_iterator = PushbackTokensIterator {
+            chars_iterator: pb,
+            tokens_info: tokens::GwTokenInfo::create(),
+            pushed_back: None
+        };
+        match parse_instruction_line(&mut tokens_iterator) {
+            ParserResult::Success(instr) => {
+                let mut buf = String::new();
+                instr.fill_structure_string(&mut buf);
+                assert_eq!(buf, String::from("(10 x = ab)"));
+            }
+            _ => panic!("errror")
+        }        
+    }
+
 
     #[test]
     fn it_parses_additive_three() {
