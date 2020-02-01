@@ -149,6 +149,10 @@ pub struct ProgramLine {
 }
 
 impl ProgramLine {
+    fn get_line(&self) -> i16 {
+        self.line
+    }
+    
     fn eval (&self, context : &mut EvaluationContext) -> InstructionResult {
          self.instruction.eval(context)
     }
@@ -202,6 +206,36 @@ pub struct GwProgram {
 }
 
 impl GwProgram {
+    pub fn new() -> GwProgram {
+        GwProgram {
+            lines: Vec::new()
+        }
+    }
+
+    pub fn list(&self) {
+        println!("---{}", self.lines.len());
+        for element in self.lines.iter() {
+            let mut string_to_print = String::new();
+            element.fill_structure_string(&mut string_to_print);
+            println!("{}", string_to_print);
+        }
+    }
+    
+    pub fn add_line(&mut self, new_line : ProgramLine) {
+        let mut i = 0;        
+        while i < self.lines.len() {
+            if new_line.get_line() == self.lines[i].get_line() {
+                self.lines[i] = new_line;
+                return;
+            } else if new_line.get_line() < self.lines[i].get_line() {
+                self.lines.insert(i, new_line);
+                return;
+            }
+            i = i + 1;
+        }
+        self.lines.push(new_line);
+    }
+    
     fn eval(&self, context : &mut EvaluationContext) {
         let mut current_index = 0;
         loop {
