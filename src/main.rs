@@ -19,6 +19,11 @@ fn main() -> io::Result<()> {
         }
 
         
+        if uline.eq_ignore_ascii_case("run") {
+           program.run();
+           continue;
+        }
+        
         match parser::parse_instruction_line_from_string(uline) {
             parser::ParserResult::Success(parsed_line) => program.add_line(parsed_line),
             parser::ParserResult::Error(error) => println!("Error: {}", error),

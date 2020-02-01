@@ -20,6 +20,15 @@ pub enum ExpressionEvalResult {
     IntegerResult(i16)    
 }
 
+impl ExpressionEvalResult {
+    fn to_string(&self) -> String {
+        match self {
+            ExpressionEvalResult::StringResult(some_string) => some_string.clone(),
+            ExpressionEvalResult::IntegerResult(iresult) => String::from(iresult.to_string())
+        }
+    }
+}
+
 pub struct EvaluationContext {
     variables: HashMap<String, ExpressionEvalResult>
 }
@@ -129,7 +138,13 @@ impl GwExpression for GwBinaryOperation {
     fn eval (&self, context : &mut EvaluationContext) -> ExpressionEvalResult {
         let left_result = self.left.eval(context);
         let right_result = self.right.eval(context);
-        panic!("Not implemented");
+        match (left_result, right_result) {
+            (ExpressionEvalResult::IntegerResult(left),
+             ExpressionEvalResult::IntegerResult(right)) =>
+                ExpressionEvalResult::IntegerResult(left + right),
+            (_, _) => panic!("Not implemented")
+            
+        }
     }
     fn fill_structure_string(&self,   val : &mut String) {
         val.push_str("(");
@@ -200,6 +215,24 @@ impl GwInstruction for GwAssign {
     }    
 }
 
+struct GwPrintStat {
+    expression : Box<dyn GwExpression>
+}
+
+impl GwInstruction for GwPrintStat {
+    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+        let result = self.expression.eval(context);
+        println!("{}", result.to_string());
+        InstructionResult::EvaluateNext
+    }
+
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str(&"PRINT ");
+        self.expression.fill_structure_string(buffer);
+    }    
+
+}
+
 pub struct GwProgram {
     lines : Vec<ProgramLine>,
 //    lines_index : Vec<u16>
@@ -219,6 +252,13 @@ impl GwProgram {
             element.fill_structure_string(&mut string_to_print);
             println!("{}", string_to_print);
         }
+    }
+
+    pub fn run(&self) {
+        let mut context = EvaluationContext {
+            variables: HashMap::new()
+        };
+        self.eval(&mut context);
     }
     
     pub fn add_line(&mut self, new_line : ProgramLine) {
@@ -284,7 +324,7 @@ impl PushbackCharsIterator<'_> {
 pub enum GwToken {
     Keyword(tokens::GwBasicToken),
     Identifier(String),
-    StringTok(String),
+    String(String),
     Integer(i16),
     Comma,
     Colon
@@ -465,6 +505,8 @@ impl<'a> PushbackTokensIterator<'a> {
             }
         } else if let Some(int_number) = recognize_int_number_str(&mut self.chars_iterator) {
             return Some(GwToken::Integer(int_number));
+        } else if let Some(string_literal) = recognize_string_literal(&mut self.chars_iterator) {
+            return Some(GwToken::String(string_literal));
         } else if recognize_specific_char(&mut self.chars_iterator, '+') {
             return Some(GwToken::Keyword(tokens::GwBasicToken::PlusTok));
         } else if recognize_specific_char(&mut self.chars_iterator, '=') {
@@ -491,12 +533,14 @@ pub enum ParserResult<T> {
 }
 
 pub fn parse_single_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
-                                               -> ParserResult<Box<dyn GwExpression>> {
+                                   -> ParserResult<Box<dyn GwExpression>> {
     if let Some(next_token) = iterator.next() {
         if let GwToken::Identifier(id) = next_token {
             ParserResult::Success(Box::new(GwVariableExpression { name: id}))
         } else if let GwToken::Integer(i_val) = next_token {
-            ParserResult::Success(Box::new(GwIntegerLiteral { value: i_val}))                            
+            ParserResult::Success(Box::new(GwIntegerLiteral { value: i_val}))
+        } else if let GwToken::String(str_val) = next_token {
+            ParserResult::Success(Box::new(GwStringLiteral { value: str_val}))                                            
         } else {
             ParserResult::Error(String::from("??"))
         }
@@ -613,6 +657,19 @@ pub fn parse_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
     return parse_additive_expression(iterator);
 }
 
+fn parse_print_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
+                        -> ParserResult<Box<dyn GwInstruction>> {
+    if let ParserResult::Success(expr) = parse_expression(iterator) {
+        return ParserResult::Success(Box::new(
+            GwPrintStat {
+                expression: expr
+            }
+        ));
+    } else {
+        return ParserResult::Error(String::from("Expecting expression as PRINT argument"));
+    }
+}
+
 fn parse_assignment<'a>(iterator : &mut PushbackTokensIterator<'a>, identifier : String)
                         -> ParserResult<Box<dyn GwInstruction>> {
 
@@ -638,7 +695,10 @@ fn parse_assignment<'a>(iterator : &mut PushbackTokensIterator<'a>, identifier :
 
 fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserResult<Box<dyn GwInstruction>> {
     if let Some(next_tok) = iterator.next() {
-        if let GwToken::Identifier(var_name) = next_tok {
+        if let GwToken::Keyword(tokens::GwBasicToken::PrintTok) = next_tok {
+            return parse_print_stat(iterator);
+        }
+        else if let GwToken::Identifier(var_name) = next_tok {
             return parse_assignment(iterator, var_name);
         } else {
             panic!("Not implemented parsing for non-assigment");

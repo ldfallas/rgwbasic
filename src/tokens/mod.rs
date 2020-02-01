@@ -200,6 +200,7 @@ pub struct GwTokenInfo {
 impl GwTokenInfo {
     pub fn create() -> GwTokenInfo {
         let mut dict  = HashMap::new();
+        dict.insert(String::from("PRINT"), GwBasicToken::PrintTok);
         dict.insert(String::from("END"), GwBasicToken::EndTok);
         dict.insert(String::from("+"), GwBasicToken::PlusTok);
         dict.insert(String::from("-"), GwBasicToken::MinusTok);
