@@ -2,10 +2,11 @@
 use crate::tokens;
 use std::collections::HashMap;
 use std::str::Chars;
+use std::convert::TryFrom;
 
 pub enum InstructionResult {
     EvaluateNext,
-    EvaluateLine(u16),
+    EvaluateLine(i16),
     EvaluateEnd
 }
 
@@ -30,10 +31,19 @@ impl ExpressionEvalResult {
 }
 
 pub struct EvaluationContext {
-    variables: HashMap<String, ExpressionEvalResult>
+    variables: HashMap<String, ExpressionEvalResult>,
+    jump_table: HashMap<i16, i16>
 }
 
 impl EvaluationContext {
+    fn get_real_line(&self, referenced_line : i16) -> Option<i16> {
+        if let Some(lin) =  self.jump_table.get(&referenced_line) {
+            Some(*lin)
+        } else {
+            None
+        }
+    }
+    
     fn lookup_variable(&self, name : &String) -> Option<&ExpressionEvalResult> {
         self.variables.get(name)
     }
@@ -215,6 +225,26 @@ impl GwInstruction for GwAssign {
     }    
 }
 
+struct GwGotoStat {
+    line : i16
+}
+
+impl GwInstruction for GwGotoStat {
+    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+        if let Some(actual_line) =  context.get_real_line(self.line) {
+                 return   InstructionResult::EvaluateLine(actual_line);
+        } else {
+            println!("-- {}", self.line);
+            panic!("Trying to jump to non existing line");
+        }
+    }
+
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str("GOTO ");
+//        buffer.push_str(self.line.to_string()[..]);
+    }
+}
+
 struct GwPrintStat {
     expression : Box<dyn GwExpression>
 }
@@ -246,7 +276,6 @@ impl GwProgram {
     }
 
     pub fn list(&self) {
-        println!("---{}", self.lines.len());
         for element in self.lines.iter() {
             let mut string_to_print = String::new();
             element.fill_structure_string(&mut string_to_print);
@@ -255,8 +284,15 @@ impl GwProgram {
     }
 
     pub fn run(&self) {
+        let mut table = HashMap::new();
+        let mut i = 0;
+        for e in self.lines.iter() {
+            table.insert(e.get_line(), i);
+            i = i + 1;
+        }
         let mut context = EvaluationContext {
-            variables: HashMap::new()
+            variables: HashMap::new(),
+            jump_table: table
         };
         self.eval(&mut context);
     }
@@ -289,7 +325,7 @@ impl GwProgram {
                     current_index = current_index + 1;
                 }
                 InstructionResult::EvaluateLine(new_line) => {
-                    panic!("aaaaaahhhh");
+                    current_index = usize::try_from(new_line).unwrap();
                 }
                 InstructionResult::EvaluateEnd => {
                     break;
@@ -366,30 +402,30 @@ fn recognize_eol<'a>(iterator : &mut PushbackCharsIterator<'a>) -> bool {
 }
 
 
-fn recognize_operator<'a>(iterator : &mut PushbackCharsIterator<'a>)
-                          -> ParserResult<GwBinaryOperationKind> {
-    match iterator.next() {
-        Some(the_char) => {
-            if the_char.is_alphabetic() {
-                iterator.push_back(the_char);
-                if let Some(operator_name) = recognize_word(iterator) {
-                    match operator_name[..] {
-                        _ => return  ParserResult::Error(String::from("Error expecting AND, OR, XOR, IMP, etc"))
-                    } 
-                } else {
-                    return  ParserResult::Error(String::from("Error expecting alphabetic operator"));
-                }
-            } else {
-                match the_char {
-                    '+' => ParserResult::Success(GwBinaryOperationKind::Plus),
-                    '-' => ParserResult::Success(GwBinaryOperationKind::Minus),
-                    _ => ParserResult::Nothing    
-                }                    
-            }
-        }
-        None => ParserResult::Nothing
-    }
-}
+// fn recognize_operator<'a>(iterator : &mut PushbackCharsIterator<'a>)
+//                           -> ParserResult<GwBinaryOperationKind> {
+//     match iterator.next() {
+//         Some(the_char) => {
+//             if the_char.is_alphabetic() {
+//                 iterator.push_back(the_char);
+//                 if let Some(operator_name) = recognize_word(iterator) {
+//                     match operator_name[..] {
+//                         _ => return  ParserResult::Error(String::from("Error expecting AND, OR, XOR, IMP, etc"))
+//                     } 
+//                 } else {
+//                     return  ParserResult::Error(String::from("Error expecting alphabetic operator"));
+//                 }
+//             } else {
+//                 match the_char {
+//                     '+' => ParserResult::Success(GwBinaryOperationKind::Plus),
+//                     '-' => ParserResult::Success(GwBinaryOperationKind::Minus),
+//                     _ => ParserResult::Nothing    
+//                 }                    
+//             }
+//         }
+//         None => ParserResult::Nothing
+//     }
+// }
 
 fn recognize_word<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Option<String> {
     if let Some(next_char) = iterator.next() {
@@ -524,7 +560,6 @@ impl<'a> PushbackTokensIterator<'a> {
         self.pushed_back = Some(tok_to_push);
     }
 }
-
 
 pub enum ParserResult<T> {
     Success(T),
@@ -670,6 +705,20 @@ fn parse_print_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
     }
 }
 
+fn parse_goto_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
+                        -> ParserResult<Box<dyn GwInstruction>> {
+    if let Some(GwToken::Integer(line)) = iterator.next() {
+        return ParserResult::Success(Box::new(
+            GwGotoStat {
+                line: line
+            }
+        ));
+    } else {
+        return ParserResult::Error(String::from("Expecting number at GOTO statement"));
+    }
+}
+
+
 fn parse_assignment<'a>(iterator : &mut PushbackTokensIterator<'a>, identifier : String)
                         -> ParserResult<Box<dyn GwInstruction>> {
 
@@ -695,7 +744,10 @@ fn parse_assignment<'a>(iterator : &mut PushbackTokensIterator<'a>, identifier :
 
 fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserResult<Box<dyn GwInstruction>> {
     if let Some(next_tok) = iterator.next() {
-        if let GwToken::Keyword(tokens::GwBasicToken::PrintTok) = next_tok {
+        if let GwToken::Keyword(tokens::GwBasicToken::GotoTok) = next_tok {
+            return parse_goto_stat(iterator);
+        }        
+        else if let GwToken::Keyword(tokens::GwBasicToken::PrintTok) = next_tok {
             return parse_print_stat(iterator);
         }
         else if let GwToken::Identifier(var_name) = next_tok {
@@ -715,11 +767,7 @@ pub fn parse_instruction_line_from_string(line : String)
         chars: line.chars(),
         pushed_back: None
     };
-    let mut tokens_iterator = PushbackTokensIterator {
-        chars_iterator: pb,
-        tokens_info: tokens::GwTokenInfo::create(),
-        pushed_back: None
-    };
+    let mut tokens_iterator = PushbackTokensIterator::create(pb);
     parse_instruction_line(&mut tokens_iterator)
 }
 
@@ -778,7 +826,9 @@ mod eval_tests {
         };
 
         let mut context = EvaluationContext {
-            variables: HashMap::new()
+            variables: HashMap::new(),
+            jump_table: HashMap::new()
+                
         };
 
         context.variables.insert(String::from("X"), ExpressionEvalResult::IntegerResult(5));
@@ -855,11 +905,7 @@ mod parser_tests {
             chars: str.chars(),
             pushed_back: None
         };
-        let mut tokens_iterator = PushbackTokensIterator {
-            chars_iterator: pb,
-            tokens_info: tokens::GwTokenInfo::create(),
-            pushed_back: None
-        };
+        let mut tokens_iterator = PushbackTokensIterator::create(pb);
         match parse_expression(&mut tokens_iterator) {
             ParserResult::Success(expr) => {
                 let mut buf = String::new();
@@ -877,11 +923,7 @@ mod parser_tests {
             chars: str.chars(),
             pushed_back: None
         };
-        let mut tokens_iterator = PushbackTokensIterator {
-            chars_iterator: pb,
-            tokens_info: tokens::GwTokenInfo::create(),
-            pushed_back: None
-        };
+        let mut tokens_iterator = PushbackTokensIterator::create(pb);
         match parse_instruction_line(&mut tokens_iterator) {
             ParserResult::Success(instr) => {
                 let mut buf = String::new();
@@ -900,11 +942,7 @@ mod parser_tests {
             chars: str.chars(),
             pushed_back: None
         };
-        let mut tokens_iterator = PushbackTokensIterator {
-            chars_iterator: pb,
-            tokens_info: tokens::GwTokenInfo::create(),
-            pushed_back: None
-        };
+        let mut tokens_iterator = PushbackTokensIterator::create(pb);
         match parse_expression(&mut tokens_iterator) {
             ParserResult::Success(expr) => {
                 let mut buf = String::new();
@@ -918,15 +956,10 @@ mod parser_tests {
     #[test]
     fn it_parses_multiplicative_four() {
         let str = "ab + bc + cd *  de";
-        let mut pb = PushbackCharsIterator {
+        let  pb = PushbackCharsIterator {
             chars: str.chars(),
             pushed_back: None
         };
-        // let mut tokens_iterator = PushbackTokensIterator {
-        //     chars_iterator: pb,
-        //     tokens_info: tokens::GwTokenInfo::create(),
-        //     pushed_back: None
-        // };
         let mut tokens_iterator = PushbackTokensIterator::create(pb);
         match parse_expression(&mut tokens_iterator) {
             ParserResult::Success(expr) => {
