@@ -232,7 +232,7 @@ struct GwGotoStat {
 impl GwInstruction for GwGotoStat {
     fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
         if let Some(actual_line) =  context.get_real_line(self.line) {
-                 return   InstructionResult::EvaluateLine(actual_line);
+                 return InstructionResult::EvaluateLine(actual_line);
         } else {
             println!("-- {}", self.line);
             panic!("Trying to jump to non existing line");
@@ -241,7 +241,6 @@ impl GwInstruction for GwGotoStat {
 
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str("GOTO ");
-//        buffer.push_str(self.line.to_string()[..]);
     }
 }
 

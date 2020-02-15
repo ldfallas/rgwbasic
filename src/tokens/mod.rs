@@ -204,15 +204,6 @@ impl GwTokenInfo {
     pub fn create() -> GwTokenInfo {
         let mut dict  = HashMap::new();
         let mut dict2  = HashMap::new();
-        /*
-        dict.insert(AsciiCaseInsensitiveKey::new(String::from("GOTO")), GwBasicToken::GotoTok);
-        
-        dict.insert(AsciiCaseInsensitiveKey::new(String::from("PRINT")), GwBasicToken::PrintTok);
-        dict.insert(AsciiCaseInsensitiveKey::new(String::from("END")), GwBasicToken::EndTok);
-        dict.insert(AsciiCaseInsensitiveKey::new(String::from("+")), GwBasicToken::PlusTok);
-        dict.insert(AsciiCaseInsensitiveKey::new(String::from("-")), GwBasicToken::MinusTok);
-        dict.insert(AsciiCaseInsensitiveKey::new(String::from("*")), GwBasicToken::TimesTok);
-         */
         GwTokenInfo::add_token("GOTO", GwBasicToken::GotoTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("END", GwBasicToken::EndTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("PRINT", GwBasicToken::PrintTok, &mut dict, &mut dict2);
