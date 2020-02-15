@@ -534,10 +534,15 @@ impl<'a> PushbackTokensIterator<'a> {
         
         consume_whitespace(&mut self.chars_iterator);
         if let Some(word) = recognize_word(&mut self.chars_iterator) {
-            if let Some(kw) =  self.tokens_info.get_token(&word) {
+            // Controversial! but it seems that GwBasic
+            // changes the case of identifers
+            let mut upper_case_word = word.clone();
+            upper_case_word.make_ascii_uppercase();
+
+            if let Some(kw) =  self.tokens_info.get_token(&upper_case_word) {
                 return Some(GwToken::Keyword(kw.clone()))
             } else {
-                return Some(GwToken::Identifier(word));
+                return Some(GwToken::Identifier(upper_case_word));
             }
         } else if let Some(int_number) = recognize_int_number_str(&mut self.chars_iterator) {
             return Some(GwToken::Integer(int_number));
@@ -910,7 +915,7 @@ mod parser_tests {
             ParserResult::Success(expr) => {
                 let mut buf = String::new();
                 expr.fill_structure_string(&mut buf);
-                assert_eq!(buf, String::from("(ab + bc)"));
+                assert_eq!(buf, String::from("(AB + BC)"));
             }
             _ => panic!("errror")
         }        
@@ -928,7 +933,7 @@ mod parser_tests {
             ParserResult::Success(instr) => {
                 let mut buf = String::new();
                 instr.fill_structure_string(&mut buf);
-                assert_eq!(buf, String::from("(10 x = ab)"));
+                assert_eq!(buf, String::from("(10 X = AB)"));
             }
             _ => panic!("errror")
         }        
@@ -947,7 +952,7 @@ mod parser_tests {
             ParserResult::Success(expr) => {
                 let mut buf = String::new();
                 expr.fill_structure_string(&mut buf);
-                assert_eq!(buf, String::from("((ab + bc) + cd)"));
+                assert_eq!(buf, String::from("((AB + BC) + CD)"));
             }
             _ => panic!("errror")
         }        
@@ -965,7 +970,7 @@ mod parser_tests {
             ParserResult::Success(expr) => {
                 let mut buf = String::new();
                 expr.fill_structure_string(&mut buf);
-                assert_eq!(buf, String::from("((ab + bc) + (cd * de))"));
+                assert_eq!(buf, String::from("((AB + BC) + (CD * DE))"));
             }
             _ => panic!("errror")
         }        

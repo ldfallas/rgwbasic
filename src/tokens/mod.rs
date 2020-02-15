@@ -4,6 +4,8 @@ use std::collections::HashMap;
 #[derive(Debug)]
 #[derive(PartialEq)]
 #[derive(Clone)]
+#[derive(Hash)]
+#[derive(Eq)]
 pub enum GwBasicToken {
    EndTok,
    ForTok,
@@ -194,24 +196,48 @@ LocTok,
 
 
 pub struct GwTokenInfo {
-    token_text : HashMap<String, GwBasicToken>
+    token_text : HashMap<String, GwBasicToken>,
+    token_vs_text : HashMap<GwBasicToken, String>        
 }
 
 impl GwTokenInfo {
     pub fn create() -> GwTokenInfo {
         let mut dict  = HashMap::new();
-        dict.insert(String::from("GOTO"), GwBasicToken::GotoTok);
+        let mut dict2  = HashMap::new();
+        /*
+        dict.insert(AsciiCaseInsensitiveKey::new(String::from("GOTO")), GwBasicToken::GotoTok);
         
-        dict.insert(String::from("PRINT"), GwBasicToken::PrintTok);
-        dict.insert(String::from("END"), GwBasicToken::EndTok);
-        dict.insert(String::from("+"), GwBasicToken::PlusTok);
-        dict.insert(String::from("-"), GwBasicToken::MinusTok);
-        dict.insert(String::from("*"), GwBasicToken::TimesTok);
+        dict.insert(AsciiCaseInsensitiveKey::new(String::from("PRINT")), GwBasicToken::PrintTok);
+        dict.insert(AsciiCaseInsensitiveKey::new(String::from("END")), GwBasicToken::EndTok);
+        dict.insert(AsciiCaseInsensitiveKey::new(String::from("+")), GwBasicToken::PlusTok);
+        dict.insert(AsciiCaseInsensitiveKey::new(String::from("-")), GwBasicToken::MinusTok);
+        dict.insert(AsciiCaseInsensitiveKey::new(String::from("*")), GwBasicToken::TimesTok);
+         */
+        GwTokenInfo::add_token("GOTO", GwBasicToken::GotoTok, &mut dict, &mut dict2);
+        GwTokenInfo::add_token("END", GwBasicToken::EndTok, &mut dict, &mut dict2);
+        GwTokenInfo::add_token("PRINT", GwBasicToken::PrintTok, &mut dict, &mut dict2);
         
+         GwTokenInfo::add_token("*", GwBasicToken::TimesTok, &mut dict, &mut dict2);
+         GwTokenInfo::add_token("-", GwBasicToken::MinusTok, &mut dict, &mut dict2);
+         GwTokenInfo::add_token("+", GwBasicToken::PlusTok, &mut dict, &mut dict2);
+
         
         GwTokenInfo {
-            token_text: dict
+            token_text: dict,
+            token_vs_text: dict2
         }
+    }
+
+    fn add_token(tok_text : &str,
+                 token : GwBasicToken,
+                 txt_vs_token : &mut HashMap<String, GwBasicToken>,
+                 token_vs_Txt : &mut HashMap<GwBasicToken, String>) {
+        let str_key = String::from(tok_text);
+        token_vs_Txt.insert(token.clone(), str_key);
+        // Controversal! couldn't figure out how to reuse the
+        // `String` instance created above without adding a lifetime annotation
+        // to this struct which makes using this struct very difficult
+        txt_vs_token.insert(String::from(tok_text), token);
     }
 
     pub fn get_token(&self, tok_text : &String) -> Option<&GwBasicToken> {
