@@ -258,9 +258,26 @@ impl GwInstruction for GwPrintStat {
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&"PRINT ");
         self.expression.fill_structure_string(buffer);
-    }    
-
+    }
 }
+
+struct GwInputStat {
+    variable : String
+}
+
+impl GwInstruction for GwInputStat {
+    fn eval(&self, context : &mut EvaluationContext) ->
+        InstructionResult {
+            
+        InstructionResult::EvaluateNext
+    }
+
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str(&"INPUT ");
+        buffer.push_str(&self.variable[..]);
+    }
+}
+
 
 pub struct GwProgram {
     lines : Vec<ProgramLine>,
@@ -270,7 +287,7 @@ pub struct GwProgram {
 impl GwProgram {
     pub fn new() -> GwProgram {
         GwProgram {
-            lines: Vec::new()
+            lines: Vec::new(),
         }
     }
 
@@ -709,6 +726,20 @@ fn parse_print_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
     }
 }
 
+fn parse_input_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
+                        -> ParserResult<Box<dyn GwInstruction>> {
+    if let Some(GwToken::Identifier(id)) = iterator.next() {
+        return ParserResult::Success(Box::new(
+            GwInputStat {
+                variable: id
+            }
+        ));
+    } else {
+        return ParserResult::Error(String::from("Expecting variable as INPUT argument"));
+    }
+}
+
+
 fn parse_goto_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
                         -> ParserResult<Box<dyn GwInstruction>> {
     if let Some(GwToken::Integer(line)) = iterator.next() {
@@ -748,6 +779,14 @@ fn parse_assignment<'a>(iterator : &mut PushbackTokensIterator<'a>, identifier :
 
 fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserResult<Box<dyn GwInstruction>> {
     if let Some(next_tok) = iterator.next() {
+        match next_tok {
+            GwToken::Keyword(tokens::GwBasicToken::GotoTok) => parse_goto_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::PrintTok)  => parse_print_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::InpTok)  => parse_input_stat(iterator),            
+            GwToken::Identifier(var_name) => parse_assignment(iterator, var_name),
+            _ => panic!("Not implemented parsing for non-assigment")
+        }
+        /*
         if let GwToken::Keyword(tokens::GwBasicToken::GotoTok) = next_tok {
             return parse_goto_stat(iterator);
         }        
@@ -758,7 +797,7 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
             return parse_assignment(iterator, var_name);
         } else {
             panic!("Not implemented parsing for non-assigment");
-        }
+        }*/
     } else {
         return ParserResult::Nothing;
     }    

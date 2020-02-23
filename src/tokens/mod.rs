@@ -207,6 +207,8 @@ impl GwTokenInfo {
         GwTokenInfo::add_token("GOTO", GwBasicToken::GotoTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("END", GwBasicToken::EndTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("PRINT", GwBasicToken::PrintTok, &mut dict, &mut dict2);
+        GwTokenInfo::add_token("INPUT", GwBasicToken::InpTok, &mut dict, &mut dict2);
+        
         
          GwTokenInfo::add_token("*", GwBasicToken::TimesTok, &mut dict, &mut dict2);
          GwTokenInfo::add_token("-", GwBasicToken::MinusTok, &mut dict, &mut dict2);
