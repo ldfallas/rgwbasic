@@ -1,8 +1,13 @@
-
+    
 use crate::tokens;
 use std::collections::HashMap;
 use std::str::Chars;
 use std::convert::TryFrom;
+use std::fs::File;
+use std::io::BufReader;
+use std::io;
+use std::io::prelude::*;
+
 
 pub enum InstructionResult {
     EvaluateNext,
@@ -170,7 +175,7 @@ impl GwExpression for GwBinaryOperation {
 pub struct ProgramLine {
     line : i16,
     instruction : Box<dyn GwInstruction>,
-    rest_instructions : Option<Box<dyn GwInstruction>>
+    rest_instructions : Option<Vec<Box<dyn GwInstruction>>>
 }
 
 impl ProgramLine {
@@ -187,6 +192,13 @@ impl ProgramLine {
         buffer.push_str(&self.line.to_string()[..]);
         buffer.push(' ');
         self.instruction.fill_structure_string(buffer);
+        if let Some(rest) = &self.rest_instructions {
+            buffer.push(' ');
+            for e in rest {
+                buffer.push(':');
+                e.fill_structure_string(buffer);
+            }
+        }
         buffer.push(')');        
     }
 }
@@ -244,6 +256,43 @@ impl GwInstruction for GwGotoStat {
     }
 }
 
+enum SwitchIndicator {
+    On, Off
+}
+
+struct GwKeyStat {
+    indicator : SwitchIndicator
+}
+
+impl GwInstruction for GwKeyStat {
+    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+       InstructionResult::EvaluateNext
+    }
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str(&"KEY ...");
+    }
+}
+
+struct GwColor {
+    red : Box<dyn GwExpression>,
+    green : Box<dyn GwExpression>,
+    blue : Box<dyn GwExpression>    
+}
+
+impl GwInstruction for GwColor {
+    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+        InstructionResult::EvaluateNext
+    }
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str(&"COLOR ");
+        self.red.fill_structure_string(buffer);
+        buffer.push_str(&", ");
+        self.green.fill_structure_string(buffer);
+        buffer.push_str(&", ");
+        self.blue.fill_structure_string(buffer);
+    }
+}
+
 struct GwPrintStat {
     expression : Box<dyn GwExpression>
 }
@@ -289,6 +338,23 @@ impl GwProgram {
         GwProgram {
             lines: Vec::new(),
         }
+    }
+
+    pub fn load_from(&mut self, file_name : &str) -> io::Result<()> {
+        let f = File::open(file_name)?;
+        let mut reader = BufReader::new(f);
+        let mut line_number = 1;
+        for line in reader.lines() {
+            let uline = line.unwrap();
+            println!(">> {}", uline);
+            match parse_instruction_line_from_string(uline) {
+               ParserResult::Success(parsed_line) => self.add_line(parsed_line),
+                ParserResult::Error(error) => {println!("Line {} Error: {}", line_number, error); break;},
+               ParserResult::Nothing=> println!("Nothing")       
+            }
+            line_number = line_number + 1;
+        }
+        Ok(())
     }
 
     pub fn list(&self) {
@@ -372,6 +438,7 @@ impl PushbackCharsIterator<'_> {
     }
 }
 
+#[derive(Debug)]
 #[derive(Clone)]
 pub enum GwToken {
     Keyword(tokens::GwBasicToken),
@@ -570,7 +637,11 @@ impl<'a> PushbackTokensIterator<'a> {
             return Some(GwToken::Keyword(tokens::GwBasicToken::EqlTok));            
             
         } else if recognize_specific_char(&mut self.chars_iterator, '*') {
-            return Some(GwToken::Keyword(tokens::GwBasicToken::TimesTok));            
+            return Some(GwToken::Keyword(tokens::GwBasicToken::TimesTok));
+        } else if recognize_specific_char(&mut self.chars_iterator, ':') {
+            return Some(GwToken::Keyword(tokens::GwBasicToken::ColonSeparatorTok));
+        } else if recognize_specific_char(&mut self.chars_iterator, ',') {
+            return Some(GwToken::Keyword(tokens::GwBasicToken::CommaSeparatorTok));            
         } else if recognize_eol(&mut self.chars_iterator) {
             return None;
         }
@@ -598,7 +669,7 @@ pub fn parse_single_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
         } else if let GwToken::String(str_val) = next_token {
             ParserResult::Success(Box::new(GwStringLiteral { value: str_val}))                                            
         } else {
-            ParserResult::Error(String::from("??"))
+            ParserResult::Error(String::from(format!("Unexpected token parsing single expression:  {:?}", next_token)))
         }
     } else {
         ParserResult::Nothing
@@ -682,6 +753,7 @@ pub fn parse_additive_expressions<'a>(iterator : &mut PushbackTokensIterator<'a>
                  return ParserResult::Error(String::from("Error parsing additive expression, expecting right side operand "));
              }
          } else {
+             iterator.push_back(next_token);
              return ParserResult::Success(current_expr);
          }
      } else {
@@ -739,6 +811,81 @@ fn parse_input_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
     }
 }
 
+fn parse_cls_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
+                      -> ParserResult<Box<dyn GwInstruction>> {
+    return ParserResult::Success(Box::new(
+        GwCls {}
+        ));
+}
+
+fn parse_key_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
+                      -> ParserResult<Box<dyn GwInstruction>> {
+    let next_token = iterator.next();
+    match next_token {
+        Some(GwToken::Keyword(tokens::GwBasicToken::OnTok)) =>
+            ParserResult::Success(Box::new(GwKeyStat { indicator : SwitchIndicator::On })),
+        Some(GwToken::Keyword(tokens::GwBasicToken::OffTok)) =>
+            ParserResult::Success(Box::new(GwKeyStat { indicator : SwitchIndicator::Off })),
+        _ => ParserResult::Error(String::from("Error parsing Key statement"))
+    }
+}
+
+
+fn parse_with_separator<'a, F,T : ?Sized>(
+    iterator : &mut PushbackTokensIterator<'a>,
+    item_parse_fn  : F,
+    separator : tokens::GwBasicToken) ->
+     ParserResult<Vec<Box< T>>>
+  where F : Fn(&mut PushbackTokensIterator<'a>) -> ParserResult<Box< T>>  {
+    let mut result = Vec::new();
+    loop {
+        let item_result = item_parse_fn(iterator);
+        if let ParserResult::Success(item) = item_result {
+            result.push(item);
+        } else {
+            return ParserResult::Error(String::from("error parsing sequence"));
+        }
+        let next_token = iterator.next();
+        match next_token {
+            Some(GwToken::Keyword(kw_tok)) if separator == kw_tok => continue,
+            Some(token_result) => {
+                iterator.push_back(token_result);
+                break;
+            },
+            _ => break
+        }
+    }
+    return ParserResult::Success(result);
+}
+
+fn parse_color_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
+                        -> ParserResult<Box<dyn GwInstruction>> {
+    let color_components = parse_with_separator(
+        iterator,
+        parse_expression,
+        tokens::GwBasicToken::CommaSeparatorTok);
+    if let ParserResult::Success(components) = color_components {
+        let mut mut_components = components;
+        if mut_components.len() == 3 {
+            let mut drain_iterator = mut_components.drain(0..);
+            let red_expr = drain_iterator.next().unwrap();
+            let green_expr = drain_iterator.next().unwrap();
+            let blue_expr = drain_iterator.next().unwrap();
+            
+            return ParserResult::Success(Box::new(GwColor {
+                red: red_expr,
+                green: green_expr,
+                blue: blue_expr
+            }));
+        } else {
+           return ParserResult::Error(String::from("Error parsing Color color components"));            
+        }
+    } else {
+        return ParserResult::Error(String::from("Error recognizing colors"));
+    }    
+}
+
+                      
 
 fn parse_goto_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
                         -> ParserResult<Box<dyn GwInstruction>> {
@@ -781,6 +928,9 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
     if let Some(next_tok) = iterator.next() {
         match next_tok {
             GwToken::Keyword(tokens::GwBasicToken::GotoTok) => parse_goto_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::ClsTok) => parse_cls_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::ColorTok) => parse_color_stat(iterator),                        
+            GwToken::Keyword(tokens::GwBasicToken::KeyTok) => parse_key_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::PrintTok)  => parse_print_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::InpTok)  => parse_input_stat(iterator),            
             GwToken::Identifier(var_name) => parse_assignment(iterator, var_name),
@@ -814,18 +964,65 @@ pub fn parse_instruction_line_from_string(line : String)
     parse_instruction_line(&mut tokens_iterator)
 }
 
+fn parse_same_line_instruction_sequence<'a>(iterator : &mut PushbackTokensIterator<'a>)
+                                            -> ParserResult<Vec<Box<dyn GwInstruction>>> {
+    if let Some(next_tok) = iterator.next() {
+                            println!(">>>>> {:?}", next_tok);
+        if let GwToken::Keyword(tokens::GwBasicToken::ColonSeparatorTok) = next_tok {
+            iterator.push_back(next_tok);
+            return parsing_same_line_instruction_sequence(iterator)
+        } else {
+            return ParserResult::Error(String::from("Expecting colon")); 
+        }
+    } else {
+        return ParserResult::Nothing;
+    }
+} 
+
+fn parsing_same_line_instruction_sequence<'a>(iterator : &mut PushbackTokensIterator<'a>)
+                                              -> ParserResult<Vec<Box<dyn GwInstruction>>> {
+    let mut results = Vec::<Box<dyn GwInstruction>>::new();    
+    while let Some(next_tok) = iterator.next() {
+        if let GwToken::Keyword(tokens::GwBasicToken::ColonSeparatorTok) = next_tok {
+            let instr_result = parse_instruction(iterator);
+            if let ParserResult::Success(parsed_instruction) = instr_result {
+                results.push(parsed_instruction);
+            } else {
+                return ParserResult::Error(String::from("Error parsing same line statement"));
+            }
+        } else {
+            return ParserResult::Error(String::from("Expecting colon"));
+        }
+    } 
+    return ParserResult::Success(results);
+} 
+
 pub fn parse_instruction_line<'a>(iterator : &mut PushbackTokensIterator<'a>)
-                              -> ParserResult<ProgramLine> {
+                                  -> ParserResult<ProgramLine> {
     if let Some(next_tok) = iterator.next() {
         if let GwToken::Integer(line_number) = next_tok {
             if let ParserResult::Success(instr) = parse_instruction(iterator) {
-                return ParserResult::Success(
-                    ProgramLine {
-    line : line_number,
-    instruction : instr,
-    rest_instructions : None
-}
-                );
+                let rest_parsing_result = parse_same_line_instruction_sequence(iterator);
+                if let ParserResult::Success(rest_inst) = rest_parsing_result {
+                    return ParserResult::Success(
+                        ProgramLine {
+                            line : line_number,
+                            instruction : instr,
+                            rest_instructions : Some(rest_inst)
+                        }
+                    );
+                } else if let ParserResult::Nothing = rest_parsing_result {                    
+                    return ParserResult::Success(
+                        ProgramLine {
+                            line : line_number,
+                            instruction : instr,
+                            rest_instructions : None
+                        }
+                    );
+                } else {
+                    return  ParserResult::Error(String::from("Error parsing line (rest)"));
+
+                }
             } else {
                 ParserResult::Error(String::from("Error parsing line"))
             }
@@ -977,6 +1174,26 @@ mod parser_tests {
         }        
     }
 
+    #[test]
+    fn it_parses_mult_instruction_line() {
+        let str = "10 x = ab : y = bc : z = cd";
+        let mut pb = PushbackCharsIterator {
+            chars: str.chars(),
+            pushed_back: None
+        };
+        let mut tokens_iterator = PushbackTokensIterator::create(pb);
+        match parse_instruction_line(&mut tokens_iterator) {
+            ParserResult::Success(instr) => {
+                let mut buf = String::new();
+                instr.fill_structure_string(&mut buf);
+
+                assert_eq!(buf, String::from("(10 X = AB :Y = BC:Z = CD)"));
+            }
+            _ => panic!("errror")
+        }        
+    }
+
+
 
     #[test]
     fn it_parses_additive_three() {
@@ -997,6 +1214,59 @@ mod parser_tests {
     }
 
     #[test]
+    fn it_parses_a_sequence_with_separator() {
+        let str = "ab , 12 , a + cd";
+        let mut pb = PushbackCharsIterator {
+            chars: str.chars(),
+            pushed_back: None
+        };
+        let mut tokens_iterator = PushbackTokensIterator::create(pb);
+        match parse_with_separator(&mut tokens_iterator,
+                                   parse_expression,
+                                   tokens::GwBasicToken::CommaSeparatorTok) {
+            ParserResult::Success(vect) => {
+                assert_eq!(3, vect.len());
+                let mut buf = String::new();
+                vect[0].fill_structure_string(&mut buf);
+                assert_eq!(buf, String::from("AB"));
+
+                let mut buf = String::new();
+                vect[1].fill_structure_string(&mut buf);
+                assert_eq!(buf, String::from("12"));
+                
+                let mut buf = String::new();
+                vect[2].fill_structure_string(&mut buf);
+                assert_eq!(buf, String::from("(A + CD)"));               
+            }
+            _ => panic!("errror")
+        }        
+    }
+
+
+    #[test]
+    fn it_parses_color() {
+        let str = "color 1,  2,3";
+        let  pb = PushbackCharsIterator {
+            chars: str.chars(),
+            pushed_back: None
+        };
+        let mut tokens_iterator = PushbackTokensIterator::create(pb);
+        match parse_instruction(&mut tokens_iterator) {
+            ParserResult::Success(expr) => {
+                let mut buf = String::new();
+                expr.fill_structure_string(&mut buf);
+                assert_eq!(buf, String::from("COLOR 1, 2, 3"));
+            },
+            ParserResult::Error(err) => {
+                panic!("Error parsing: {}", err);
+            },
+            _ => panic!("errror")
+        }        
+    }     
+    
+    
+
+    #[test]
     fn it_parses_multiplicative_four() {
         let str = "ab + bc + cd *  de";
         let  pb = PushbackCharsIterator {
@@ -1013,7 +1283,7 @@ mod parser_tests {
             _ => panic!("errror")
         }        
     }     
-    
+
 
     #[test]
     fn it_identifies_numbers() {
