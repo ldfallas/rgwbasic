@@ -27,6 +27,8 @@ fn main() -> io::Result<()> {
 //        let uline = line.unwrap();
         if uline.eq_ignore_ascii_case("system") {
             break;
+        } else if uline.eq_ignore_ascii_case("load") {
+           program.load_from("DEPREC.BAS");            
         } else if uline.eq_ignore_ascii_case("list") {
            program.list();
         } else if uline.eq_ignore_ascii_case("run") {
