@@ -231,9 +231,9 @@ impl GwTokenInfo {
     fn add_token(tok_text : &str,
                  token : GwBasicToken,
                  txt_vs_token : &mut HashMap<String, GwBasicToken>,
-                 token_vs_Txt : &mut HashMap<GwBasicToken, String>) {
+                 token_vs_txt : &mut HashMap<GwBasicToken, String>) {
         let str_key = String::from(tok_text);
-        token_vs_Txt.insert(token.clone(), str_key);
+        token_vs_txt.insert(token.clone(), str_key);
         // Controversal! couldn't figure out how to reuse the
         // `String` instance created above without adding a lifetime annotation
         // to this struct which makes using this struct very difficult

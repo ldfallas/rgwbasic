@@ -68,7 +68,7 @@ pub struct GwStringLiteral {
 }
 
 impl GwExpression for GwStringLiteral {
-    fn eval (&self, context : &mut EvaluationContext) -> ExpressionEvalResult {
+    fn eval (&self, _context : &mut EvaluationContext) -> ExpressionEvalResult {
         ExpressionEvalResult::StringResult(String::from(&self.value))
     }
 
@@ -82,7 +82,7 @@ pub struct GwIntegerLiteral {
 }
 
 impl GwExpression for GwIntegerLiteral {
-    fn eval (&self, context : &mut EvaluationContext) -> ExpressionEvalResult {
+    fn eval (&self, _context : &mut EvaluationContext) -> ExpressionEvalResult {
         ExpressionEvalResult::IntegerResult(self.value)
     }
     fn fill_structure_string(&self, buffer : &mut String) {
@@ -144,6 +144,8 @@ impl GwBinaryOperation {
         match self.kind {
             GwBinaryOperationKind::Plus => buffer.push_str(" + "),
             GwBinaryOperationKind::Times => buffer.push_str(" * "),
+            GwBinaryOperationKind::Minus => buffer.push_str(" - "),
+            
             _ => buffer.push_str(" ?? ")
         }
     }
@@ -209,7 +211,7 @@ pub struct GwCls {
 }
 
 impl GwInstruction for GwCls {
-    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self, _context : &mut EvaluationContext) -> InstructionResult{
         InstructionResult::EvaluateNext
     }
 
@@ -265,11 +267,15 @@ struct GwKeyStat {
 }
 
 impl GwInstruction for GwKeyStat {
-    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self, _context : &mut EvaluationContext) -> InstructionResult{
        InstructionResult::EvaluateNext
     }
     fn fill_structure_string(&self, buffer : &mut String) {
-        buffer.push_str(&"KEY ...");
+        buffer.push_str(&"KEY ");
+        match self.indicator {
+            SwitchIndicator::On => buffer.push_str("ON"),
+            SwitchIndicator::Off => buffer.push_str("OFF")
+        }
     }
 }
 
@@ -280,7 +286,7 @@ struct GwColor {
 }
 
 impl GwInstruction for GwColor {
-    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self, _context : &mut EvaluationContext) -> InstructionResult{
         InstructionResult::EvaluateNext
     }
     fn fill_structure_string(&self, buffer : &mut String) {
@@ -315,7 +321,7 @@ struct GwInputStat {
 }
 
 impl GwInstruction for GwInputStat {
-    fn eval(&self, context : &mut EvaluationContext) ->
+    fn eval(&self, _context : &mut EvaluationContext) ->
         InstructionResult {
             
         InstructionResult::EvaluateNext
@@ -342,7 +348,7 @@ impl GwProgram {
 
     pub fn load_from(&mut self, file_name : &str) -> io::Result<()> {
         let f = File::open(file_name)?;
-        let mut reader = BufReader::new(f);
+        let reader = BufReader::new(f);
         let mut line_number = 1;
         for line in reader.lines() {
             let uline = line.unwrap();
@@ -465,7 +471,7 @@ fn consume_whitespace<'a>(iterator : &mut PushbackCharsIterator<'a>) {
 
 fn recognize_specific_char<'a>(iterator : &mut PushbackCharsIterator<'a>, c : char) -> bool {
     if let Some(next_char) = iterator.next()  {
-        let result = (next_char == c);
+        let result = next_char == c;
         if !result {
            iterator.push_back(next_char);
         }
@@ -633,6 +639,9 @@ impl<'a> PushbackTokensIterator<'a> {
             return Some(GwToken::String(string_literal));
         } else if recognize_specific_char(&mut self.chars_iterator, '+') {
             return Some(GwToken::Keyword(tokens::GwBasicToken::PlusTok));
+        } else if recognize_specific_char(&mut self.chars_iterator, '-') {
+            return Some(GwToken::Keyword(tokens::GwBasicToken::MinusTok));
+            
         } else if recognize_specific_char(&mut self.chars_iterator, '=') {
             return Some(GwToken::Keyword(tokens::GwBasicToken::EqlTok));            
             
@@ -694,11 +703,11 @@ pub fn parse_multiplicative_expressions<'a>(iterator : &mut PushbackTokensIterat
      if let Some(next_token) = iterator.next() {
          if let Some(tok) = one_kw_token_of(&next_token, &tokens::GwBasicToken::DivTok, &tokens::GwBasicToken::TimesTok) {
              if let ParserResult::Success(right_side_parse_result) = parse_multiplicative_expression(iterator) {
-
+                let kind = get_operation_kind_from_token(tok).unwrap();
                 current_expr = 
                          Box::new(
                             GwBinaryOperation {
-                                kind: GwBinaryOperationKind::Times,
+                                kind: kind,
                                 left: current_expr,
                                 right: right_side_parse_result });
              } else {
@@ -731,6 +740,17 @@ pub fn parse_multiplicative_expression<'a>(iterator : &mut PushbackTokensIterato
     }
 }
 
+
+////
+fn get_operation_kind_from_token(token : &tokens::GwBasicToken)
+                                 -> Option<GwBinaryOperationKind> {
+    match token {
+        tokens::GwBasicToken::PlusTok => Some(GwBinaryOperationKind::Plus),
+        tokens::GwBasicToken::MinusTok => Some(GwBinaryOperationKind::Minus),
+        
+        _ => None
+    }
+}
 ////
 
 
@@ -746,7 +766,7 @@ pub fn parse_additive_expressions<'a>(iterator : &mut PushbackTokensIterator<'a>
                 current_expr = 
                          Box::new(
                             GwBinaryOperation {
-                                kind: GwBinaryOperationKind::Plus,
+                                kind: get_operation_kind_from_token(tok).unwrap(),
                                 left: current_expr,
                                 right: right_side_parse_result });
              } else {
@@ -811,7 +831,7 @@ fn parse_input_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
     }
 }
 
-fn parse_cls_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
+fn parse_cls_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
                       -> ParserResult<Box<dyn GwInstruction>> {
     return ParserResult::Success(Box::new(
         GwCls {}
@@ -956,7 +976,7 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
 pub fn parse_instruction_line_from_string(line : String)
                                           -> ParserResult<ProgramLine> {
     
-    let mut pb = PushbackCharsIterator {
+    let pb = PushbackCharsIterator {
         chars: line.chars(),
         pushed_back: None
     };
@@ -1156,6 +1176,25 @@ mod parser_tests {
         }        
     }
 
+    #[test]
+    fn it_parses_minus() {
+        let str = "ab - bc";
+        let mut pb = PushbackCharsIterator {
+            chars: str.chars(),
+            pushed_back: None
+        };
+        let mut tokens_iterator = PushbackTokensIterator::create(pb);
+        match parse_expression(&mut tokens_iterator) {
+            ParserResult::Success(expr) => {
+                let mut buf = String::new();
+                expr.fill_structure_string(&mut buf);
+                assert_eq!(buf, String::from("(AB - BC)"));
+            }
+            _ => panic!("errror")
+        }        
+    }
+
+    
     #[test]
     fn it_parses_assignment_instruction() {
         let str = "10 x = ab";
