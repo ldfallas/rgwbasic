@@ -747,6 +747,7 @@ fn get_operation_kind_from_token(token : &tokens::GwBasicToken)
     match token {
         tokens::GwBasicToken::PlusTok => Some(GwBinaryOperationKind::Plus),
         tokens::GwBasicToken::MinusTok => Some(GwBinaryOperationKind::Minus),
+        tokens::GwBasicToken::TimesTok => Some(GwBinaryOperationKind::Times),
         
         _ => None
     }
