@@ -7,7 +7,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::io;
 use std::io::prelude::*;
-
+use std::process::exit;
 
 pub enum InstructionResult {
     EvaluateNext,
@@ -35,19 +35,28 @@ impl ExpressionEvalResult {
     }
 }
 
-pub struct EvaluationContext {
+pub struct EvaluationContext<'a> {
     variables: HashMap<String, ExpressionEvalResult>,
-    jump_table: HashMap<i16, i16>
+    jump_table: HashMap<i16, i16>,
+    underlying_program: Option<&'a mut GwProgram>
 }
 
-impl EvaluationContext {
+impl EvaluationContext<'_>  {
+    pub fn with_program(programm : &mut GwProgram) -> EvaluationContext {
+        EvaluationContext {
+            variables : HashMap::new(),
+            jump_table : HashMap::new(),
+            underlying_program: Some(programm)
+        }
+    }
+
     fn get_real_line(&self, referenced_line : i16) -> Option<i16> {
         if let Some(lin) =  self.jump_table.get(&referenced_line) {
             Some(*lin)
         } else {
             None
         }
-    }
+    }   
     
     fn lookup_variable(&self, name : &String) -> Option<&ExpressionEvalResult> {
         self.variables.get(name)
@@ -171,8 +180,6 @@ impl GwExpression for GwBinaryOperation {
         val.push_str(")");
     }
 }
- 
-
 
 pub struct ProgramLine {
     line : i16,
@@ -202,6 +209,83 @@ impl ProgramLine {
             }
         }
         buffer.push(')');        
+    }
+}
+
+pub struct GwListStat {
+}
+
+impl GwInstruction for GwListStat {
+    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+        if let Some(up) =  &context.underlying_program {
+            up.list();
+        }
+        
+        InstructionResult::EvaluateNext
+    }    
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str(&"LIST");
+    }
+}
+
+
+pub struct GwLoadStat {
+    filename : Box<dyn GwExpression>
+}
+
+impl GwInstruction for GwLoadStat {
+    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+        let result = self.filename.eval(context);
+        if let Some(up) =  &mut context.underlying_program {
+            match result {
+                ExpressionEvalResult::StringResult(filename) =>
+                {
+                    match up.load_from(&filename.trim_matches('"')) {
+                        Ok(_) => {
+                            println!("File loaded");
+                        }
+                        Err(error) => {
+                            panic!("Error loading file {:?}", error);
+                        }
+                    }
+                },
+                _ => {panic!("Type mismatch"); }
+            }
+
+        }       
+        InstructionResult::EvaluateNext
+    }    
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str(&"LOAD ");
+        self.filename.fill_structure_string(buffer);
+
+    }
+}
+
+pub struct GwRunStat {
+}
+
+impl GwInstruction for GwRunStat {
+    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+        if let Some(program) = &context.underlying_program {
+            program.run();
+        }
+        InstructionResult::EvaluateNext
+    }    
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str(&"RUN");
+    }
+}
+
+pub struct GwSystemStat {
+}
+
+impl GwInstruction for GwSystemStat {
+    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+        exit(0);
+    }    
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str(&"RUN");
     }
 }
 
@@ -380,7 +464,8 @@ impl GwProgram {
         }
         let mut context = EvaluationContext {
             variables: HashMap::new(),
-            jump_table: table
+            jump_table: table,
+            underlying_program: None
         };
         self.eval(&mut context);
     }
@@ -806,6 +891,30 @@ pub fn parse_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
     return parse_additive_expression(iterator);
 }
 
+
+fn parse_list_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
+                      -> ParserResult<Box<dyn GwInstruction>> {
+    return ParserResult::Success(Box::new(
+        GwListStat {}
+    ));
+}
+
+
+fn parse_run_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
+                      -> ParserResult<Box<dyn GwInstruction>> {
+    return ParserResult::Success(Box::new(
+        GwRunStat {}
+    ));
+}
+
+fn parse_system_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
+                      -> ParserResult<Box<dyn GwInstruction>> {
+    return ParserResult::Success(Box::new(
+        GwSystemStat {}
+    ));
+}
+
+
 fn parse_print_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
                         -> ParserResult<Box<dyn GwInstruction>> {
     if let ParserResult::Success(expr) = parse_expression(iterator) {
@@ -818,6 +927,20 @@ fn parse_print_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
         return ParserResult::Error(String::from("Expecting expression as PRINT argument"));
     }
 }
+
+fn parse_load_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
+                        -> ParserResult<Box<dyn GwInstruction>> {
+    if let ParserResult::Success(expr) = parse_expression(iterator) {
+        return ParserResult::Success(Box::new(
+            GwLoadStat {
+                filename: expr
+            }
+        ));
+    } else {
+        return ParserResult::Error(String::from("Expecting expression as LOAD  argument"));
+    }
+}
+
 
 fn parse_input_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
                         -> ParserResult<Box<dyn GwInstruction>> {
@@ -953,6 +1076,10 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
             GwToken::Keyword(tokens::GwBasicToken::ColorTok) => parse_color_stat(iterator),                        
             GwToken::Keyword(tokens::GwBasicToken::KeyTok) => parse_key_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::PrintTok)  => parse_print_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::ListTok)  => parse_list_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::RunTok)  => parse_run_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::LoadTok)  => parse_load_stat(iterator),            
+            GwToken::Keyword(tokens::GwBasicToken::SystemTok)  => parse_system_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::InpTok)  => parse_input_stat(iterator),            
             GwToken::Identifier(var_name) => parse_assignment(iterator, var_name),
             _ => panic!("Not implemented parsing for non-assigment")
@@ -973,6 +1100,18 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
         return ParserResult::Nothing;
     }    
 }
+
+pub fn parse_repl_instruction_string(line : String)
+                                          -> ParserResult<Box<dyn GwInstruction>> {
+    
+    let pb = PushbackCharsIterator {
+        chars: line.chars(),
+        pushed_back: None
+    };
+    let mut tokens_iterator = PushbackTokensIterator::create(pb);
+    parse_instruction(&mut tokens_iterator)
+}
+
 
 pub fn parse_instruction_line_from_string(line : String)
                                           -> ParserResult<ProgramLine> {
@@ -1088,8 +1227,8 @@ mod eval_tests {
 
         let mut context = EvaluationContext {
             variables: HashMap::new(),
-            jump_table: HashMap::new()
-                
+            jump_table: HashMap::new(),
+            underlying_program: None                
         };
 
         context.variables.insert(String::from("X"), ExpressionEvalResult::IntegerResult(5));

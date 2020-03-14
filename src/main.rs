@@ -2,6 +2,9 @@
 pub mod tokens;
 pub mod parser;
 use std::io::{self, BufRead};
+use std::collections::HashMap;
+
+
 
 fn read_stdin_line(line : &mut String) -> bool {
     let stdin = io::stdin();
@@ -23,25 +26,25 @@ fn main() -> io::Result<()> {
     let mut uline = String::new();
     let mut success = read_stdin_line(&mut uline);
     while success {
+        if uline.len() > 0 && uline.chars().nth(0).unwrap().is_digit(10) {
+            match parser::parse_instruction_line_from_string(uline) {
+                parser::ParserResult::Success(parsed_line) => program.add_line(parsed_line),
+                parser::ParserResult::Error(error) => println!("Error: {}", error),
+                parser::ParserResult::Nothing=> println!("Nothing")       
 
-//        let uline = line.unwrap();
-        if uline.eq_ignore_ascii_case("system") {
-            break;
-        } else if uline.eq_ignore_ascii_case("load") {
-           program.load_from("DEPREC.BAS");            
-        } else if uline.eq_ignore_ascii_case("list") {
-           program.list();
-        } else if uline.eq_ignore_ascii_case("run") {
-           program.run();
-           println!("Ok");
+            }
+
         } else {
-        
-           match parser::parse_instruction_line_from_string(uline) {
-               parser::ParserResult::Success(parsed_line) => program.add_line(parsed_line),
-               parser::ParserResult::Error(error) => println!("Error: {}", error),
-               parser::ParserResult::Nothing=> println!("Nothing")       
-
-           }
+            match parser::parse_repl_instruction_string (uline) {
+                parser::ParserResult::Success(parsed_instr) => {
+                    let mut context = parser::EvaluationContext::with_program(&mut program);
+                    parsed_instr.eval(&mut context);
+                }
+                _ => {
+                    println!("Error processing command");
+                }
+            }
+            
         }
         uline = String::new();
         success = read_stdin_line(&mut uline)                

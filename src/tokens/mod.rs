@@ -216,8 +216,11 @@ impl GwTokenInfo {
         GwTokenInfo::add_token("ON", GwBasicToken::OnTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("CLS", GwBasicToken::ClsTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("COLOR", GwBasicToken::ColorTok, &mut dict, &mut dict2);
-                
-         GwTokenInfo::add_token("*", GwBasicToken::TimesTok, &mut dict, &mut dict2);
+        GwTokenInfo::add_token("LIST", GwBasicToken::ListTok, &mut dict, &mut dict2);
+        GwTokenInfo::add_token("RUN", GwBasicToken::RunTok, &mut dict, &mut dict2);
+        GwTokenInfo::add_token("SYSTEM", GwBasicToken::SystemTok, &mut dict, &mut dict2);
+        GwTokenInfo::add_token("LOAD", GwBasicToken::LoadTok, &mut dict, &mut dict2);        
+        GwTokenInfo::add_token("*", GwBasicToken::TimesTok, &mut dict, &mut dict2);
          GwTokenInfo::add_token("-", GwBasicToken::MinusTok, &mut dict, &mut dict2);
          GwTokenInfo::add_token("+", GwBasicToken::PlusTok, &mut dict, &mut dict2);
 
