@@ -441,19 +441,40 @@ impl GwInstruction for GwColor {
 }
 
 pub struct GwPrintStat {
-    pub expression : Box<dyn GwExpression>
+    pub expressions : Vec<Option<Box<dyn GwExpression>>>
 }
 
 impl GwInstruction for GwPrintStat {
     fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
-        let result = self.expression.eval(context);
+
+        let mut result = String::new();
+        for print_expr in &self.expressions {
+            match print_expr {
+                Some(expr) => {
+                    let evaluated_expr = expr.eval(context);
+                    result.push_str(&evaluated_expr.to_string()[..]);
+                },
+                _ => {}
+            }
+        }
+
         println!("{}", result.to_string());
         InstructionResult::EvaluateNext
     }
 
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&"PRINT ");
-        self.expression.fill_structure_string(buffer);
+
+        let mut result = String::new();
+        for print_expr in &self.expressions {
+            match print_expr {
+                Some(expr) => {
+                    expr.fill_structure_string(buffer);
+                },
+                _ => {}
+            }
+            buffer.push_str(";");
+        }
     }
 }
 

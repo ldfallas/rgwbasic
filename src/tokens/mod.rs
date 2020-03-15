@@ -194,6 +194,7 @@ pub enum GwBasicToken {
     // new tokens
     ColonSeparatorTok,
     CommaSeparatorTok,
+    SemiColonSeparatorTok,
     Untokenized(u8)
 }
 
