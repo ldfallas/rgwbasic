@@ -1,8 +1,7 @@
-
+pub mod eval;
 pub mod tokens;
 pub mod parser;
 use std::io::{self, BufRead};
-use std::collections::HashMap;
 
 
 
@@ -20,7 +19,7 @@ fn read_stdin_line(line : &mut String) -> bool {
 }
 
 fn main() -> io::Result<()> {
-    let mut program = parser::GwProgram::new();
+    let mut program = eval::GwProgram::new();
     println!("Ok");
     //for line in stdinLock.lines() {
     let mut uline = String::new();
@@ -37,7 +36,7 @@ fn main() -> io::Result<()> {
         } else {
             match parser::parse_repl_instruction_string (uline) {
                 parser::ParserResult::Success(parsed_instr) => {
-                    let mut context = parser::EvaluationContext::with_program(&mut program);
+                    let mut context = eval::EvaluationContext::with_program(&mut program);
                     parsed_instr.eval(&mut context);
                 }
                 _ => {
