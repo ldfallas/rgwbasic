@@ -307,6 +307,45 @@ impl GwInstruction for GwSystemStat {
     }
 }
 
+pub enum DefVarRange {
+    Single(char),
+    Range(char, char) 
+}
+
+pub struct GwDefDbl {
+    ranges : Vec<DefVarRange>
+}
+
+impl GwDefDbl {
+    pub fn with_var_range(var_range : Vec<DefVarRange>)
+                          -> GwDefDbl {
+        GwDefDbl { ranges : var_range }
+    }
+}
+
+impl GwInstruction for GwDefDbl {
+    fn eval (&self, _context : &mut EvaluationContext) -> InstructionResult{
+        // TODO implementation pending
+        InstructionResult::EvaluateNext
+    }
+
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str(&"DEFDBL ");
+        for obj in &self.ranges {
+            match obj {
+                DefVarRange::Single(c) =>
+                    buffer.push_str(&c.to_string()[..]),
+                DefVarRange::Range(s, e) => {
+                    buffer.push_str(&s.to_string()[..]);
+                    buffer.push_str("-");
+                    buffer.push_str(&e.to_string()[..]);
+                }
+            }
+            buffer.push_str(",");
+        }
+    }    
+}
+
 
 pub struct GwCls {
     

@@ -21,7 +21,8 @@ use crate::eval::GwColor;
 use crate::eval::GwGotoStat;
 use crate::eval::GwAssign;
 use crate::eval::ProgramLine;
-
+use crate::eval::DefVarRange;
+use crate::eval::GwDefDbl;
 
 
 pub struct PushbackCharsIterator<'a> {
@@ -469,6 +470,78 @@ fn parse_input_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
     }
 }
 
+
+fn parse_var_range_fragment<'a>(iterator : &mut PushbackTokensIterator<'a>,
+                      start : char)
+                      -> ParserResult<DefVarRange> {
+    let token_result = iterator.next();
+    if let Some(tok) = token_result {
+        match tok {
+            GwToken::Keyword(tokens::GwBasicToken::MinusTok) => {
+                if let Some(GwToken::Identifier(end)) = iterator.next() {
+                    //TODO unsafe way of getting single char
+                    // also no validation on that the variable has
+                    // to be a single char
+                    return ParserResult::Success(
+                        DefVarRange::Range(start, end.chars().nth(0).unwrap())
+                    );
+                } else {
+                    return ParserResult::Error(String::from("Expecting end of range "));
+                }
+            }
+            _ => {
+                iterator.push_back(tok);
+                return ParserResult::Success(DefVarRange::Single(start))
+            }
+        }
+    } else {
+        return  ParserResult::Success(DefVarRange::Single(start))
+    }
+}
+
+
+fn parse_var_range<'a>(iterator : &mut PushbackTokensIterator<'a>)
+                   -> ParserResult<DefVarRange> {
+    let token_result = iterator.next();
+    if let Some(tok) = token_result {
+        match tok {
+            GwToken::Identifier(start) => {
+                //TODO UNSAFE CHAR access
+                // also we need to validate for single chars
+                return parse_var_range_fragment(
+                    iterator,
+                    start.chars().nth(0).unwrap());
+            }
+            _ => {
+                iterator.push_back(tok);
+                return ParserResult::Nothing;
+            }
+        }
+    } else {
+        return ParserResult::Nothing;
+    }
+}
+
+
+fn parse_defdbl_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
+                         -> ParserResult<Box<dyn GwInstruction>> {
+    let ranges_result =
+        parse_with_separator(iterator,
+                             parse_var_range,
+                             tokens::GwBasicToken::CommaSeparatorTok);
+    match ranges_result {
+        ParserResult::Success(ranges_vector) => {
+            return ParserResult::Success(Box::new(
+                GwDefDbl::with_var_range(ranges_vector)
+            ));
+        }, 
+        ParserResult::Error(error) => {
+            return ParserResult::Error(error)
+        }
+        ParserResult::Nothing => ParserResult::Nothing
+    }
+}
+
 fn parse_cls_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
                       -> ParserResult<Box<dyn GwInstruction>> {
     return ParserResult::Success(Box::new(
@@ -489,12 +562,12 @@ fn parse_key_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
 }
 
 
-fn parse_with_separator<'a, F,T : ?Sized>(
+fn parse_with_separator<'a, F,T>(
     iterator : &mut PushbackTokensIterator<'a>,
     item_parse_fn  : F,
     separator : tokens::GwBasicToken) ->
-     ParserResult<Vec<Box< T>>>
-  where F : Fn(&mut PushbackTokensIterator<'a>) -> ParserResult<Box< T>>  {
+     ParserResult<Vec<T>>
+  where F : Fn(&mut PushbackTokensIterator<'a>) -> ParserResult<T>  {
     let mut result = Vec::new();
     loop {
         let item_result = item_parse_fn(iterator);
@@ -587,6 +660,7 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
         match next_tok {
             GwToken::Keyword(tokens::GwBasicToken::GotoTok) => parse_goto_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::ClsTok) => parse_cls_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::DefdblTok) => parse_defdbl_stat(iterator),            
             GwToken::Keyword(tokens::GwBasicToken::ColorTok) => parse_color_stat(iterator),                        
             GwToken::Keyword(tokens::GwBasicToken::KeyTok) => parse_key_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::PrintTok)  => parse_print_stat(iterator),
