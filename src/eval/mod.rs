@@ -172,7 +172,7 @@ impl GwBinaryOperation {
             GwBinaryOperationKind::Plus => buffer.push_str(" + "),
             GwBinaryOperationKind::Times => buffer.push_str(" * "),
             GwBinaryOperationKind::Minus => buffer.push_str(" - "),
-            
+            GwBinaryOperationKind::FloatDiv => buffer.push_str(" / "),            
             _ => buffer.push_str(" ?? ")
         }
     }
@@ -344,6 +344,36 @@ impl GwInstruction for GwDefDbl {
             buffer.push_str(",");
         }
     }    
+}
+
+pub struct GwIf {
+    pub condition : Box<dyn GwExpression>,
+    pub then_line : i16
+}
+
+impl GwInstruction for GwIf {
+   fn eval (&self, _context : &mut EvaluationContext) -> InstructionResult{
+        InstructionResult::EvaluateNext
+    }
+
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str(&"IF ...");
+    }
+}
+
+pub struct GwRem {
+    pub comment : String
+}
+
+impl GwInstruction for GwRem {
+    fn eval (&self, _context : &mut EvaluationContext) -> InstructionResult{
+        InstructionResult::EvaluateNext
+    }
+
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str(&"REM ");
+        buffer.push_str(&self.comment[..]);
+    }
 }
 
 

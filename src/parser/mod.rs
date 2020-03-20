@@ -23,12 +23,14 @@ use crate::eval::GwAssign;
 use crate::eval::ProgramLine;
 use crate::eval::DefVarRange;
 use crate::eval::GwDefDbl;
+use crate::eval::GwRem;
 
 
 pub struct PushbackCharsIterator<'a> {
     chars : Chars<'a>,
     pushed_back: Option<char>
 }
+
 impl PushbackCharsIterator<'_> {
     fn next(&mut self) -> Option<char> {
         if let Some(pushed) = self.pushed_back {
@@ -239,6 +241,8 @@ impl<'a> PushbackTokensIterator<'a> {
             return Some(GwToken::String(string_literal));
         } else if recognize_specific_char(&mut self.chars_iterator, '+') {
             return Some(GwToken::Keyword(tokens::GwBasicToken::PlusTok));
+        } else if recognize_specific_char(&mut self.chars_iterator, '/') {
+            return Some(GwToken::Keyword(tokens::GwBasicToken::DivTok));            
         } else if recognize_specific_char(&mut self.chars_iterator, '-') {
             return Some(GwToken::Keyword(tokens::GwBasicToken::MinusTok));
             
@@ -261,6 +265,15 @@ impl<'a> PushbackTokensIterator<'a> {
     pub fn push_back(&mut self, tok_to_push : GwToken) {
         self.pushed_back = Some(tok_to_push);
     }
+
+    fn consume_rest_of_line(&mut self) -> String {
+        let mut result = String::new();
+        while let Some(next_char) = self.chars_iterator.next() {
+            result.push(next_char);
+        }
+        return result;
+    }
+
 }
 
 pub enum ParserResult<T> {
@@ -353,6 +366,7 @@ fn get_operation_kind_from_token(token : &tokens::GwBasicToken)
         tokens::GwBasicToken::PlusTok => Some(GwBinaryOperationKind::Plus),
         tokens::GwBasicToken::MinusTok => Some(GwBinaryOperationKind::Minus),
         tokens::GwBasicToken::TimesTok => Some(GwBinaryOperationKind::Times),
+        tokens::GwBasicToken::DivTok => Some(GwBinaryOperationKind::FloatDiv),
         
         _ => None
     }
@@ -551,6 +565,16 @@ fn parse_defdbl_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
     }
 }
 
+fn parse_rem_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
+                      -> ParserResult<Box<dyn GwInstruction>> {
+    return ParserResult::Success(Box::new(
+        GwRem {
+            comment: iterator.consume_rest_of_line()
+        }
+        ));
+}
+
+
 fn parse_cls_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
                       -> ParserResult<Box<dyn GwInstruction>> {
     return ParserResult::Success(Box::new(
@@ -705,6 +729,7 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
         match next_tok {
             GwToken::Keyword(tokens::GwBasicToken::GotoTok) => parse_goto_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::ClsTok) => parse_cls_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::RemTok) => parse_rem_stat(iterator),            
             GwToken::Keyword(tokens::GwBasicToken::DefdblTok) => parse_defdbl_stat(iterator),            
             GwToken::Keyword(tokens::GwBasicToken::ColorTok) => parse_color_stat(iterator),                        
             GwToken::Keyword(tokens::GwBasicToken::KeyTok) => parse_key_stat(iterator),
