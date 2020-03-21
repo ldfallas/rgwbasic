@@ -16,6 +16,7 @@ use crate::eval::GwPrintStat;
 use crate::eval::GwLoadStat;
 use crate::eval::GwInputStat;
 use crate::eval::GwCls;
+use crate::eval::GwIf;
 use crate::eval::GwKeyStat;
 use crate::eval::GwColor;
 use crate::eval::GwGotoStat;
@@ -24,6 +25,7 @@ use crate::eval::ProgramLine;
 use crate::eval::DefVarRange;
 use crate::eval::GwDefDbl;
 use crate::eval::GwRem;
+use crate::eval::GwParenthesizedExpr;
 
 
 pub struct PushbackCharsIterator<'a> {
@@ -241,6 +243,8 @@ impl<'a> PushbackTokensIterator<'a> {
             return Some(GwToken::String(string_literal));
         } else if recognize_specific_char(&mut self.chars_iterator, '+') {
             return Some(GwToken::Keyword(tokens::GwBasicToken::PlusTok));
+        } else if recognize_specific_char(&mut self.chars_iterator, '^') {
+            return Some(GwToken::Keyword(tokens::GwBasicToken::PowOperatorTok));
         } else if recognize_specific_char(&mut self.chars_iterator, '/') {
             return Some(GwToken::Keyword(tokens::GwBasicToken::DivTok));            
         } else if recognize_specific_char(&mut self.chars_iterator, '-') {
@@ -250,6 +254,10 @@ impl<'a> PushbackTokensIterator<'a> {
             return Some(GwToken::Keyword(tokens::GwBasicToken::EqlTok));                        
         } else if recognize_specific_char(&mut self.chars_iterator, '*') {
             return Some(GwToken::Keyword(tokens::GwBasicToken::TimesTok));
+        } else if recognize_specific_char(&mut self.chars_iterator, '(') {
+            return Some(GwToken::Keyword(tokens::GwBasicToken::LparTok));
+        } else if recognize_specific_char(&mut self.chars_iterator, ')') {
+            return Some(GwToken::Keyword(tokens::GwBasicToken::RparTok));                        
         } else if recognize_specific_char(&mut self.chars_iterator, ':') {
             return Some(GwToken::Keyword(tokens::GwBasicToken::ColonSeparatorTok));
         } else if recognize_specific_char(&mut self.chars_iterator, ';') {
@@ -295,7 +303,8 @@ pub fn parse_single_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
         //     ParserResult::Error(String::from(format!("Unexpected token parsing single expression:  {:?}", next_token)))
         // }
 //    } else {
-     
+        } else if let GwToken::Keyword(tokens::GwBasicToken::LparTok) = next_token {
+            return parse_parenthesized_expression(iterator);
         } else {
             iterator.push_back(next_token);
         }
@@ -303,7 +312,18 @@ pub fn parse_single_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
     ParserResult::Nothing
 }
 
-
+fn parse_parenthesized_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
+                                      -> ParserResult<Box<dyn GwExpression>> {
+    if let ParserResult::Success(inner_expr) = parse_expression(iterator) {
+        if let Some(GwToken::Keyword(tokens::GwBasicToken::RparTok)) = iterator.next() {
+            return ParserResult::Success(Box::new(GwParenthesizedExpr::new(inner_expr)));
+        } else {
+            return ParserResult::Error(String::from("Expecting right side parenthesis"));
+        }
+    } else {
+        return ParserResult::Error(String::from("Expecting expression on parenthesized expression"));
+    }
+}
 
 fn one_kw_token_of<'a>(token : &'a GwToken, t1 : &'a tokens::GwBasicToken, t2 : &'a tokens::GwBasicToken) -> Option<&'a tokens::GwBasicToken>{
     match token  {
@@ -312,6 +332,18 @@ fn one_kw_token_of<'a>(token : &'a GwToken, t1 : &'a tokens::GwBasicToken, t2 : 
     }        
 }
 
+fn one_kw_token_of3<'a>(token : &'a GwToken,
+                       t1 : &'a tokens::GwBasicToken,
+                       t2 : &'a tokens::GwBasicToken,
+                       t3 : &'a tokens::GwBasicToken)
+                       -> Option<&'a tokens::GwBasicToken>{
+    match token  {
+        GwToken::Keyword(tok) if *tok == *t1 || *tok == *t2 || *tok == *t3 => Some(tok),
+        _ => None
+    }        
+}
+
+
 ////
 pub fn parse_multiplicative_expressions<'a>(iterator : &mut PushbackTokensIterator<'a>, current : Box<dyn GwExpression>)
                                           -> ParserResult<Box<dyn GwExpression>> {
@@ -319,7 +351,7 @@ pub fn parse_multiplicative_expressions<'a>(iterator : &mut PushbackTokensIterat
   let mut current_expr = current;
   loop {
      if let Some(next_token) = iterator.next() {
-         if let Some(tok) = one_kw_token_of(&next_token, &tokens::GwBasicToken::DivTok, &tokens::GwBasicToken::TimesTok) {
+         if let Some(tok) = one_kw_token_of3(&next_token, &tokens::GwBasicToken::DivTok, &tokens::GwBasicToken::TimesTok, &tokens::GwBasicToken::PowOperatorTok) {
              if let ParserResult::Success(right_side_parse_result) = parse_multiplicative_expression(iterator) {
                 let kind = get_operation_kind_from_token(tok).unwrap();
                 current_expr = 
@@ -367,7 +399,8 @@ fn get_operation_kind_from_token(token : &tokens::GwBasicToken)
         tokens::GwBasicToken::MinusTok => Some(GwBinaryOperationKind::Minus),
         tokens::GwBasicToken::TimesTok => Some(GwBinaryOperationKind::Times),
         tokens::GwBasicToken::DivTok => Some(GwBinaryOperationKind::FloatDiv),
-        
+        tokens::GwBasicToken::EqlTok => Some(GwBinaryOperationKind::Equal),
+        tokens::GwBasicToken::PowOperatorTok => Some(GwBinaryOperationKind::Exponent),        
         _ => None
     }
 }
@@ -420,9 +453,65 @@ pub fn parse_additive_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
     }
 }
 
+
+fn is_comparison_operation_token(token : &GwToken)
+                                 -> Option<tokens::GwBasicToken> {
+    match token {
+        GwToken::Keyword(tok@tokens::GwBasicToken::EqlTok) =>
+            Some(tok.clone()),
+        _ => None
+    }
+}
+
+pub fn parse_comparison_expressions<'a>(iterator : &mut PushbackTokensIterator<'a>,
+                                        current : Box<dyn GwExpression>)
+                                        -> ParserResult<Box<dyn GwExpression>> {
+
+  let mut current_expr = current;
+  loop {
+     if let Some(next_token) = iterator.next() {
+         if let Some(tok) = is_comparison_operation_token(&next_token) {
+             if let ParserResult::Success(right_side_parse_result) = parse_additive_expression(iterator) {
+                current_expr = 
+                         Box::new(
+                            GwBinaryOperation {
+                                kind: get_operation_kind_from_token(&tok).unwrap(),
+                                left: current_expr,
+                                right: right_side_parse_result });
+             } else {
+                 return ParserResult::Error(String::from("Error parsing comparison expression, expecting right side operand "));
+             }
+         } else {
+             iterator.push_back(next_token);
+             return ParserResult::Success(current_expr);
+         }
+     } else {
+         return ParserResult::Success(current_expr);
+     }
+  }
+}
+
+
+pub fn parse_comparison_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
+                                     -> ParserResult<Box<dyn GwExpression>> {
+
+    match parse_additive_expression(iterator) {
+        ParserResult::Success(left_side_parse_result) => {
+            return parse_comparison_expressions(iterator, left_side_parse_result);
+        },
+        ParserResult::Nothing => {
+            ParserResult::Nothing
+        }        
+        ParserResult::Error(msg) => {
+            ParserResult::Error(msg)
+        }
+    }
+}
+
+
 pub fn parse_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
                             -> ParserResult<Box<dyn GwExpression>> {
-    return parse_additive_expression(iterator);
+    return parse_comparison_expression(iterator);
 }
 
 
@@ -451,6 +540,12 @@ fn parse_system_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
 
 fn parse_print_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
                         -> ParserResult<Box<dyn GwInstruction>> {
+    if let Some(tok) = iterator.next() {
+        if let GwToken::Keyword(tokens::GwBasicToken::UsingTok) = tok {
+            iterator.push_back(tok);
+        }
+    } 
+    
     if let ParserResult::Success(exprs) =
         parse_with_flexible_separator(
             iterator,
@@ -493,6 +588,25 @@ fn parse_input_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
     }
 }
 
+fn parse_if_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
+                     -> ParserResult<Box<dyn GwInstruction>> {
+
+    if let ParserResult::Success(expr) =  parse_expression(iterator) {
+        if let Some(GwToken::Keyword(tokens::GwBasicToken::ThenTok)) = iterator.next() {
+            if let Some(GwToken::Integer(line_number)) = iterator.next() {
+                return ParserResult::Success(Box::new(
+                    GwIf::new(expr, line_number)
+                ));                
+            } else {
+                return ParserResult::Error(String::from("Expecting line number"));
+            }
+        } else {
+            return ParserResult::Error(String::from("Expecting THEN keyword"));                    
+        }
+    } else {
+        return ParserResult::Error(String::from("Expecting variable as expression as part of IF statement"));        
+    }
+}
 
 fn parse_var_range_fragment<'a>(iterator : &mut PushbackTokensIterator<'a>,
                       start : char)
@@ -736,7 +850,8 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
             GwToken::Keyword(tokens::GwBasicToken::PrintTok)  => parse_print_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::ListTok)  => parse_list_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::RunTok)  => parse_run_stat(iterator),
-            GwToken::Keyword(tokens::GwBasicToken::LoadTok)  => parse_load_stat(iterator),            
+            GwToken::Keyword(tokens::GwBasicToken::LoadTok)  => parse_load_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::IfTok)  => parse_if_stat(iterator),                        
             GwToken::Keyword(tokens::GwBasicToken::SystemTok)  => parse_system_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::InpTok)  => parse_input_stat(iterator),            
             GwToken::Identifier(var_name) => parse_assignment(iterator, var_name),

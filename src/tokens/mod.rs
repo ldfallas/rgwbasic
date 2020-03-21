@@ -195,6 +195,8 @@ pub enum GwBasicToken {
     ColonSeparatorTok,
     CommaSeparatorTok,
     SemiColonSeparatorTok,
+    LparTok,
+    RparTok,
     Untokenized(u8)
 }
 
@@ -212,6 +214,8 @@ impl GwTokenInfo {
         GwTokenInfo::add_token("END", GwBasicToken::EndTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("PRINT", GwBasicToken::PrintTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("INPUT", GwBasicToken::InpTok, &mut dict, &mut dict2);
+        GwTokenInfo::add_token("IF", GwBasicToken::IfTok, &mut dict, &mut dict2);
+        GwTokenInfo::add_token("THEN", GwBasicToken::ThenTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("KEY", GwBasicToken::KeyTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("OFF", GwBasicToken::OffTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("ON", GwBasicToken::OnTok, &mut dict, &mut dict2);

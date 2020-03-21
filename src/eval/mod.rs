@@ -72,6 +72,31 @@ pub trait GwExpression {
     fn fill_structure_string(&self,   buffer : &mut String);
 }
 
+pub struct GwParenthesizedExpr {
+    expr: Box<dyn GwExpression>
+}
+
+impl GwParenthesizedExpr {
+    pub fn new(expr : Box<dyn GwExpression>)
+               -> GwParenthesizedExpr {
+        GwParenthesizedExpr {
+            expr: expr
+        }
+    }    
+}
+
+impl GwExpression for GwParenthesizedExpr {
+    fn eval (&self, context : &mut EvaluationContext) -> ExpressionEvalResult {
+        return self.expr.eval(context);
+    }
+    fn fill_structure_string(&self, buffer : &mut String) {        
+        buffer.push_str("(");
+        self.expr.fill_structure_string(buffer);
+        buffer.push_str(")");        
+    }
+
+}
+
 pub struct GwStringLiteral {
     value : String
 }
@@ -80,6 +105,10 @@ impl GwStringLiteral {
     pub fn with_value(value : String) -> GwStringLiteral {
         GwStringLiteral { value: value } 
     }
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str(&self.value[..]);
+    }
+
 }
 
 impl GwExpression for GwStringLiteral {
@@ -347,8 +376,17 @@ impl GwInstruction for GwDefDbl {
 }
 
 pub struct GwIf {
-    pub condition : Box<dyn GwExpression>,
-    pub then_line : i16
+    condition : Box<dyn GwExpression>,
+    then_line : i16
+}
+
+impl GwIf {
+    pub fn new(condition : Box<dyn GwExpression>, then_line : i16) -> GwIf {
+        return GwIf {
+            condition: condition,
+            then_line: then_line
+        };
+    }
 }
 
 impl GwInstruction for GwIf {
