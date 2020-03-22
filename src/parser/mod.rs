@@ -542,6 +542,8 @@ fn parse_print_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
                         -> ParserResult<Box<dyn GwInstruction>> {
     if let Some(tok) = iterator.next() {
         if let GwToken::Keyword(tokens::GwBasicToken::UsingTok) = tok {
+            // TODO process `USING` scenario
+        } else {
             iterator.push_back(tok);
         }
     } 
@@ -935,8 +937,8 @@ pub fn parse_instruction_line<'a>(iterator : &mut PushbackTokensIterator<'a>)
     if let Some(next_tok) = iterator.next() {
         if let GwToken::Integer(line_number) = next_tok {
             if let ParserResult::Success(instr) = parse_instruction(iterator) {
-                let rest_parsing_result = parse_same_line_instruction_sequence(iterator);
-                if let ParserResult::Success(rest_inst) = rest_parsing_result {
+                match parse_same_line_instruction_sequence(iterator) {
+                 ParserResult::Success(rest_inst) => {
                     return ParserResult::Success(
                         ProgramLine {
                             line : line_number,
@@ -944,7 +946,8 @@ pub fn parse_instruction_line<'a>(iterator : &mut PushbackTokensIterator<'a>)
                             rest_instructions : Some(rest_inst)
                         }
                     );
-                } else if let ParserResult::Nothing = rest_parsing_result {                    
+                 },
+                 ParserResult::Nothing => {                    
                     return ParserResult::Success(
                         ProgramLine {
                             line : line_number,
@@ -952,9 +955,9 @@ pub fn parse_instruction_line<'a>(iterator : &mut PushbackTokensIterator<'a>)
                             rest_instructions : None
                         }
                     );
-                } else {
-                    return  ParserResult::Error(String::from("Error parsing line (rest)"));
-
+                 },
+                 ParserResult::Error(err) => 
+                       ParserResult::Error(String::from(err))
                 }
             } else {
                 ParserResult::Error(String::from("Error parsing line"))

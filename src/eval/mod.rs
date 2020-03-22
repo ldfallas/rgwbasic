@@ -9,6 +9,12 @@ use std::process::exit;
 use crate::parser::ParserResult;
 use crate::parser::parse_instruction_line_from_string;
 
+enum GwVariableType {
+    Double,
+    Integer,
+    String
+}
+
 pub enum InstructionResult {
     EvaluateNext,
     EvaluateLine(i16),
@@ -23,14 +29,17 @@ pub trait GwInstruction {
 #[derive(Clone)]
 pub enum ExpressionEvalResult {
     StringResult(String),
-    IntegerResult(i16)    
+    IntegerResult(i16),
+    DoubleResult(f32)
 }
 
 impl ExpressionEvalResult {
     fn to_string(&self) -> String {
         match self {
             ExpressionEvalResult::StringResult(some_string) => some_string.clone(),
-            ExpressionEvalResult::IntegerResult(iresult) => String::from(iresult.to_string())
+            ExpressionEvalResult::IntegerResult(iresult) => String::from(iresult.to_string()),
+            ExpressionEvalResult::DoubleResult(dresult) => String::from(dresult.to_string())
+            
         }
     }
 }
@@ -64,6 +73,15 @@ impl EvaluationContext<'_>  {
     
     fn set_variable(&mut self, name : &String, value : &ExpressionEvalResult) {
         self.variables.insert(name.clone(), value.clone());
+    }
+
+    fn get_variable_type(&self, name : &String) -> Option<GwVariableType> {
+        match self.lookup_variable(name) {
+            Some(ExpressionEvalResult::StringResult(_)) => Some(GwVariableType::String),
+            Some(ExpressionEvalResult::IntegerResult(_)) => Some(GwVariableType::Integer),
+            Some(ExpressionEvalResult::DoubleResult(_)) => Some(GwVariableType::Double),
+            _ => None
+        }
     }
 }
 
@@ -551,9 +569,24 @@ pub struct GwInputStat {
 }
 
 impl GwInstruction for GwInputStat {
-    fn eval(&self, _context : &mut EvaluationContext) ->
-        InstructionResult {
-            
+    fn eval(&self, context : &mut EvaluationContext) -> InstructionResult {
+        let mut buffer = String::new();
+        io::stdin().read_line(&mut buffer);
+        match context.get_variable_type(&self.variable) {
+            Some(GwVariableType::Double) => {
+                context.set_variable(
+                    &self.variable,
+                    &ExpressionEvalResult::DoubleResult(buffer.trim_end().parse::<f32>().unwrap()));
+            },
+            None => {
+                // Assume `double` for non-existing variable
+                context.set_variable(
+                    &self.variable,
+                    &ExpressionEvalResult::DoubleResult(buffer.trim_end().parse::<f32>().unwrap()));
+
+            },
+            _ => panic!("Not implemented INPUT for this type")
+        }
         InstructionResult::EvaluateNext
     }
 
@@ -584,9 +617,9 @@ impl GwProgram {
             let uline = line.unwrap();
             println!(">> {}", uline);
             match parse_instruction_line_from_string(uline) {
-               ParserResult::Success(parsed_line) => self.add_line(parsed_line),
+                ParserResult::Success(parsed_line) => self.add_line(parsed_line),
                 ParserResult::Error(error) => {println!("Line {} Error: {}", line_number, error); break;},
-               ParserResult::Nothing=> println!("Nothing")       
+                ParserResult::Nothing=> println!("Nothing")       
             }
             line_number = line_number + 1;
         }
