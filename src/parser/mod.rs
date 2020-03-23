@@ -1,13 +1,13 @@
     
 use crate::tokens;
 use std::str::Chars;
-use crate::eval::GwBinaryOperationKind;
+use crate::eval::binary::GwBinaryOperationKind;
 use crate::eval::SwitchIndicator;
 use crate::eval::GwExpression;
 use crate::eval::GwVariableExpression;
 use crate::eval::GwIntegerLiteral;
 use crate::eval::GwStringLiteral;
-use crate::eval::GwBinaryOperation;
+use crate::eval::binary::GwBinaryOperation;
 use crate::eval::GwInstruction;
 use crate::eval::GwListStat;
 use crate::eval::GwRunStat;
@@ -356,10 +356,7 @@ pub fn parse_multiplicative_expressions<'a>(iterator : &mut PushbackTokensIterat
                 let kind = get_operation_kind_from_token(tok).unwrap();
                 current_expr = 
                          Box::new(
-                            GwBinaryOperation {
-                                kind: kind,
-                                left: current_expr,
-                                right: right_side_parse_result });
+                            GwBinaryOperation::new(kind, current_expr, right_side_parse_result ));
              } else {
                  return ParserResult::Error(String::from("Error parsing additive expression, expecting right side operand "));
              }
@@ -418,10 +415,10 @@ pub fn parse_additive_expressions<'a>(iterator : &mut PushbackTokensIterator<'a>
 
                 current_expr = 
                          Box::new(
-                            GwBinaryOperation {
-                                kind: get_operation_kind_from_token(tok).unwrap(),
-                                left: current_expr,
-                                right: right_side_parse_result });
+                            GwBinaryOperation::new(
+                                get_operation_kind_from_token(tok).unwrap(),
+                                current_expr,
+                                right_side_parse_result ));
              } else {
                  return ParserResult::Error(String::from("Error parsing additive expression, expecting right side operand "));
              }
@@ -474,10 +471,10 @@ pub fn parse_comparison_expressions<'a>(iterator : &mut PushbackTokensIterator<'
              if let ParserResult::Success(right_side_parse_result) = parse_additive_expression(iterator) {
                 current_expr = 
                          Box::new(
-                            GwBinaryOperation {
-                                kind: get_operation_kind_from_token(&tok).unwrap(),
-                                left: current_expr,
-                                right: right_side_parse_result });
+                            GwBinaryOperation::new(
+                                get_operation_kind_from_token(&tok).unwrap(),
+                                current_expr,
+                                right_side_parse_result ));
              } else {
                  return ParserResult::Error(String::from("Error parsing comparison expression, expecting right side operand "));
              }

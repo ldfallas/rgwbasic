@@ -1,4 +1,6 @@
 
+pub mod binary;
+
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fs::File;
@@ -185,66 +187,7 @@ impl GwExpression for GwVariableExpression {
 }
 
 
-pub enum GwBinaryOperationKind {
-    Plus,
-    Minus,
-    Times,
-    FloatDiv,
-    IntDiv,
-    LessThan,
-    LessEqualThan,
-    GreaterThan,
-    GreaterEqualThan,
-    Equal,
-    Different,
-    Exponent,
-    Mod,             
-    And,
-    Or,
-    Eqv,
-    Xor,
-    Implication   
-}
 
-
-pub struct GwBinaryOperation {
-    pub kind: GwBinaryOperationKind,
-    pub left: Box<dyn GwExpression>,
-    pub right: Box<dyn GwExpression>
-}
-
-impl GwBinaryOperation {
-   fn fill_operator(&self, buffer : &mut String) {
-        match self.kind {
-            GwBinaryOperationKind::Plus => buffer.push_str(" + "),
-            GwBinaryOperationKind::Times => buffer.push_str(" * "),
-            GwBinaryOperationKind::Minus => buffer.push_str(" - "),
-            GwBinaryOperationKind::FloatDiv => buffer.push_str(" / "),            
-            _ => buffer.push_str(" ?? ")
-        }
-    }
-}
-
-impl GwExpression for GwBinaryOperation {
-    fn eval (&self, context : &mut EvaluationContext) -> ExpressionEvalResult {
-        let left_result = self.left.eval(context);
-        let right_result = self.right.eval(context);
-        match (left_result, right_result) {
-            (ExpressionEvalResult::IntegerResult(left),
-             ExpressionEvalResult::IntegerResult(right)) =>
-                ExpressionEvalResult::IntegerResult(left + right),
-            (_, _) => panic!("Not implemented")
-            
-        }
-    }
-    fn fill_structure_string(&self,   val : &mut String) {
-        val.push_str("(");
-        self.left.fill_structure_string(val);
-        self.fill_operator(val);
-        self.right.fill_structure_string(val);        
-        val.push_str(")");
-    }
-}
 
 pub struct ProgramLine {
     pub line : i16,
@@ -408,8 +351,12 @@ impl GwIf {
 }
 
 impl GwInstruction for GwIf {
-   fn eval (&self, _context : &mut EvaluationContext) -> InstructionResult{
-        InstructionResult::EvaluateNext
+    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+        match self.condition.eval(context) {
+            ExpressionEvalResult::IntegerResult(i_result) if i_result == 0 => InstructionResult::EvaluateNext,
+            ExpressionEvalResult::DoubleResult(d_result) if d_result == 0.0 => InstructionResult::EvaluateNext,
+            _ => InstructionResult::EvaluateLine(self.then_line)
+        }        
     }
 
     fn fill_structure_string(&self, buffer : &mut String) {
