@@ -1,11 +1,13 @@
     
 use crate::tokens;
 use std::str::Chars;
+use std::str::FromStr;
 use crate::eval::binary::GwBinaryOperationKind;
 use crate::eval::SwitchIndicator;
 use crate::eval::GwExpression;
 use crate::eval::GwVariableExpression;
 use crate::eval::GwIntegerLiteral;
+use crate::eval::GwDoubleLiteral;
 use crate::eval::GwStringLiteral;
 use crate::eval::binary::GwBinaryOperation;
 use crate::eval::GwInstruction;
@@ -55,6 +57,7 @@ pub enum GwToken {
     Identifier(String),
     String(String),
     Integer(i16),
+    Double(f32),    
     Comma,
     Colon
 }
@@ -200,6 +203,65 @@ fn recognize_int_number_str<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Op
 }
 
 
+///
+///  cases for single 45.32, -1.09E-03,22.5!
+///  cases for double 34234234, -1.03432D-06, 342342.0#
+///
+
+
+fn convert_numeric_string(tmp_string : &String)  ->  Option<GwToken> {
+    if tmp_string.contains(".")  {
+        if let Ok(result) = f32::from_str(&tmp_string.to_string()) {
+            Some(GwToken::Double(result))
+        } else {
+            None
+        }
+    } else {
+        if let Ok(result) = i16::from_str_radix(&tmp_string.to_string(), 10) {
+            Some(GwToken::Integer(result))
+        } else {            
+            None
+        }
+    }
+}
+
+
+fn recognize_float_number_str<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Option<GwToken> {
+    if let Some(c) = iterator.next()  {
+        let mut has_dot = false;
+        if c.is_digit(10) || c == '.'  {
+            if c == '.' {
+                has_dot = true;
+            }
+            let mut tmp_string = String::new();
+            tmp_string.push(c);
+            loop {
+                if let Some(c) = iterator.next() {
+                    if c.is_digit(10) {
+                        tmp_string.push(c);
+                    } else if c == '.' && !has_dot {
+                        tmp_string.push(c);
+                        has_dot = true;
+                    } else {
+                        iterator.push_back(c);
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+            convert_numeric_string(&tmp_string.to_string())
+        } else {
+            iterator.push_back(c);
+            None
+        }
+    } else {
+        None
+    }
+}
+
+
+
 pub struct PushbackTokensIterator<'a> {
     chars_iterator: PushbackCharsIterator<'a>,
     tokens_info: tokens::GwTokenInfo,
@@ -237,8 +299,8 @@ impl<'a> PushbackTokensIterator<'a> {
             } else {
                 return Some(GwToken::Identifier(upper_case_word));
             }
-        } else if let Some(int_number) = recognize_int_number_str(&mut self.chars_iterator) {
-            return Some(GwToken::Integer(int_number));
+        } else if let Some(number_tok) = recognize_float_number_str(&mut self.chars_iterator) {
+            return Some(number_tok);
         } else if let Some(string_literal) = recognize_string_literal(&mut self.chars_iterator) {
             return Some(GwToken::String(string_literal));
         } else if recognize_specific_char(&mut self.chars_iterator, '+') {
@@ -297,6 +359,8 @@ pub fn parse_single_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
             return ParserResult::Success(Box::new(GwVariableExpression::with_name(id)))
         } else if let GwToken::Integer(i_val) = next_token {
             return ParserResult::Success(Box::new(GwIntegerLiteral::with_value(i_val)))
+        } else if let GwToken::Double(d_val) = next_token {
+            return ParserResult::Success(Box::new(GwDoubleLiteral::with_value(d_val)))                
         } else if let GwToken::String(str_val) = next_token {
             return ParserResult::Success(Box::new(GwStringLiteral::with_value(str_val)))
         // } else {

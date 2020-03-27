@@ -127,14 +127,7 @@ impl BinaryOperationEvaluator for PowEvaluator {
     }
     
     fn perform_double_operation(&self, left : f32, right : f32) -> f32 {
-        let mut result: f32 = 1.0;
-        for i in 1 .. (right as i16) + 1  {
-            result *= left;
-        }
-
-
-        result
-
+        left.powf(right)
     }
 }
 

@@ -160,6 +160,26 @@ impl GwExpression for GwIntegerLiteral {
     }    
 }
 
+pub struct GwDoubleLiteral {
+    value : f32
+}
+
+impl GwDoubleLiteral {
+    pub fn with_value(value : f32) -> GwDoubleLiteral {
+        GwDoubleLiteral { value : value }
+    }
+}
+
+impl GwExpression for GwDoubleLiteral {
+    fn eval (&self, _context : &mut EvaluationContext) -> ExpressionEvalResult {
+        ExpressionEvalResult::DoubleResult(self.value)
+    }
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str(&self.value.to_string());
+    }    
+}
+
+
 
 pub struct GwVariableExpression {
     name : String
