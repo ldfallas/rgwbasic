@@ -120,7 +120,7 @@ impl BinaryOperationEvaluator for PowEvaluator {
     fn perform_int_operation(&self, left : i16, right : i16) -> i16 {
         let mut result = 1;
 
-        for i in 1..right + 1  {
+        for _i in 1..right + 1  {
             result *= left;
         }
         result        

@@ -17,6 +17,7 @@ enum GwVariableType {
     String
 }
 
+
 pub enum InstructionResult {
     EvaluateNext,
     EvaluateLine(i16),
@@ -35,6 +36,15 @@ pub enum ExpressionEvalResult {
     DoubleResult(f32)
 }
 
+fn get_default_value_for_type(var_type : &GwVariableType) -> ExpressionEvalResult {
+    match var_type {
+        GwVariableType::String => ExpressionEvalResult::StringResult(String::from("")),
+        GwVariableType::Integer => ExpressionEvalResult::IntegerResult(0),
+        GwVariableType::Double => ExpressionEvalResult::DoubleResult(0.0)
+    }       
+}
+
+
 impl ExpressionEvalResult {
     fn to_string(&self) -> String {
         match self {
@@ -48,18 +58,50 @@ impl ExpressionEvalResult {
 
 pub struct EvaluationContext<'a> {
     variables: HashMap<String, ExpressionEvalResult>,
+    array_variables: HashMap<String, GwArray>,
     jump_table: HashMap<i16, i16>,
     underlying_program: Option<&'a mut GwProgram>
 }
 
 impl EvaluationContext<'_>  {
+    pub fn new() -> EvaluationContext<'static>   {
+        EvaluationContext {
+            variables : HashMap::new(),
+            jump_table : HashMap::new(),
+            array_variables: HashMap::new(),
+            underlying_program: None
+        }        
+    }
     pub fn with_program(programm : &mut GwProgram) -> EvaluationContext {
         EvaluationContext {
             variables : HashMap::new(),
             jump_table : HashMap::new(),
+            array_variables: HashMap::new(),
             underlying_program: Some(programm)
         }
     }
+
+    pub fn set_array_entry(&mut self, name : &String, indices : Vec<u16>, new_value : &ExpressionEvalResult) {
+        if let Some(mut_array) = self.array_variables.get_mut(name) {
+            mut_array.set_value(&indices, &new_value);
+        } else {
+            panic!("array not found");
+        }
+    }
+
+    pub fn declare_array(&mut self, name : String, size : u16) {
+        let new_array = GwArray::new_one_dimension(size, GwVariableType::Double);
+        self.array_variables.insert(name, new_array);
+    }
+
+    pub fn get_existing_array(&self, name : &String, _size : usize) -> Option<&GwArray> {
+        self.array_variables.get(name)
+    }
+
+    fn get_existing_function(&self, _name : &String, _size : usize) -> Option<&GwArray> {
+        panic!("not implemented");
+    }
+
 
     fn get_real_line(&self, referenced_line : i16) -> Option<i16> {
         if let Some(lin) =  self.jump_table.get(&referenced_line) {
@@ -90,6 +132,99 @@ impl EvaluationContext<'_>  {
 pub trait GwExpression {
     fn eval(&self, context : &mut EvaluationContext) -> ExpressionEvalResult ;
     fn fill_structure_string(&self,   buffer : &mut String);
+}
+
+pub struct GwArray {
+    values : Vec<ExpressionEvalResult>,
+    element_type : GwVariableType,
+    dimensions: Vec<u16>
+}
+
+impl GwArray {
+    fn new_one_dimension(size : u16, array_type : GwVariableType)
+                         -> GwArray{
+        let mut values = Vec::with_capacity(usize::from(size));
+        for _i in 0..size{
+            values.push( get_default_value_for_type(&array_type));
+        }
+        let dimensions = vec![size];
+        GwArray {
+            values: values,
+            element_type: array_type,
+            dimensions: dimensions
+        }
+    }
+
+    pub fn get_value(&self, index_array : Vec<u16>) -> ExpressionEvalResult {
+        let mut index : u16 = 0;
+        for i in 1..self.dimensions.len() {
+            index = (index_array[i] as u16) * self.dimensions[i];
+        }
+        index = index + (index_array[index_array.len() - 1] as u16);
+        self.values[usize::from(index)].clone()
+    }
+
+    pub fn set_value(&mut self, index_array : &Vec<u16>, new_value : &ExpressionEvalResult) {
+        let mut index : u16 = 0;
+        for i in 1..self.dimensions.len() {
+            index = (index_array[i] as u16) * self.dimensions[i];
+        }
+        index = index + (index_array[index_array.len() - 1] as u16);
+        self.values[usize::from(index)] = new_value.clone();
+    }
+}
+
+pub struct GwParenthesizedAccessExpr {
+    name : String,
+    arguments : Vec<Box<dyn GwExpression>>
+}
+
+impl GwParenthesizedAccessExpr {
+    fn new(name : String, arguments : Vec<Box<dyn GwExpression>>)
+           -> GwParenthesizedAccessExpr
+    {
+        GwParenthesizedAccessExpr {
+            name: name,
+            arguments: arguments
+        }
+    }    
+}
+
+fn try_to_get_integer_index(eval_result : &ExpressionEvalResult) -> Option<u16> {
+    match eval_result {
+        ExpressionEvalResult::IntegerResult(i_result) => Some(*i_result as u16),
+        ExpressionEvalResult::DoubleResult(d_result) => Some(*d_result as u16),
+        _ => None
+    }
+}
+
+impl GwExpression for GwParenthesizedAccessExpr {
+    fn eval (&self, context : &mut EvaluationContext) -> ExpressionEvalResult {
+        let mut evaluated_arguments = Vec::with_capacity(self.arguments.len());
+        for arg in &self.arguments {
+            let eval_index = arg.eval(context);
+            evaluated_arguments.push(try_to_get_integer_index(&eval_index).unwrap());
+        }
+        
+        if let Some(array) = context.get_existing_array(
+            &self.name,
+            self.arguments.len()) {
+            return array.get_value(evaluated_arguments);
+        } else if let Some(_function) = context.get_existing_function(
+            &self.name,
+            self.arguments.len()) {
+            panic!("Not implemented");
+        } else {
+            panic!("Cannot use parenthesis with identifier {}", self.name);
+        }        
+    }
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str(&self.name[..]);
+        buffer.push_str("(");
+        //self.expr.fill_structure_string(buffer);
+        buffer.push_str(")");        
+    }
+
 }
 
 pub struct GwParenthesizedExpr {
@@ -433,6 +568,41 @@ impl GwInstruction for GwAssign {
     }    
 }
 
+//
+
+pub struct GwArrayAssign {
+    pub variable : String,
+    pub indices_expressions : Vec<Box<dyn GwExpression>>,
+    pub expression : Box<dyn GwExpression>
+}
+
+impl GwInstruction for GwArrayAssign {
+    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+        let mut evaluated_arguments = Vec::with_capacity(self.indices_expressions.len());
+        for arg in &self.indices_expressions {
+            let eval_index = arg.eval(context);
+            evaluated_arguments.push(try_to_get_integer_index(&eval_index).unwrap());
+        }
+
+        let expression_evaluation = self.expression.eval(context);
+        context.set_array_entry(
+            &self.variable,
+            evaluated_arguments,
+            &expression_evaluation);
+        InstructionResult::EvaluateNext
+    }
+
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str(&self.variable[..]);
+        buffer.push_str(&"(...) = ");
+        self.expression.fill_structure_string(buffer);
+    }    
+}
+
+
+//
+
+
 pub struct GwGotoStat {
     pub line : i16
 }
@@ -518,7 +688,7 @@ impl GwInstruction for GwPrintStat {
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&"PRINT ");
 
-        let mut result = String::new();
+//        let mut result = String::new();
         for print_expr in &self.expressions {
             match print_expr {
                 Some(expr) => {
@@ -609,6 +779,7 @@ impl GwProgram {
             i = i + 1;
         }
         let mut context = EvaluationContext {
+            array_variables: HashMap::new(),
             variables: HashMap::new(),
             jump_table: table,
             underlying_program: None
@@ -668,7 +839,6 @@ mod eval_tests {
     //    use crate::parser::*;
     use crate::eval::ExpressionEvalResult;
     use crate::eval::*;
-
     
     #[test]
     fn it_tests_basic_eval() {
@@ -689,6 +859,7 @@ mod eval_tests {
 
         let mut context = EvaluationContext {
             variables: HashMap::new(),
+            array_variables: HashMap::new(),
             jump_table: HashMap::new(),
             underlying_program: None                
         };
@@ -705,8 +876,48 @@ mod eval_tests {
         if let Some(ExpressionEvalResult::IntegerResult(value)) = context.lookup_variable(&String::from("X")) {
             let some_value : i16 = 10;
             assert_eq!(&some_value, value);
-        }
-        
+        }        
     }
+
+    #[test]
+    fn it_tests_basic_array_eval() {
+        let line1 = ProgramLine {
+            line: 10,
+            instruction: Box::new(GwArrayAssign {
+                variable: String::from("A"),
+                indices_expressions: vec![Box::new(GwIntegerLiteral::with_value(1))],
+                expression: Box::new( GwIntegerLiteral {
+                    value: 12
+                })
+            }),
+            rest_instructions: None
+        };
+
+        let program  = GwProgram {
+            lines: vec![line1]
+        };
+
+        let mut context = EvaluationContext::new();
+
+        context.declare_array(String::from("A"), 10);
+
+        let arr1 = context.get_existing_array(&String::from("A"), 1);
+
+        
+        if let ExpressionEvalResult::IntegerResult(value) = arr1.unwrap().get_value(vec![1]) {
+            let some_value : i16 = 0;
+            assert_eq!(some_value, value);
+        }
+
+        program.eval(&mut context);
+
+        let arr2 = context.get_existing_array(&String::from("A"), 1);
+
+        if let ExpressionEvalResult::IntegerResult(value) = arr2.unwrap().get_value(vec![1]) {
+            let some_value : i16 = 12;
+            assert_eq!(some_value, value);
+        }        
+    }
+
 }
 
