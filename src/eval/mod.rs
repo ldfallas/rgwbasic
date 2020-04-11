@@ -227,6 +227,26 @@ impl GwExpression for GwParenthesizedAccessExpr {
 
 }
 
+pub struct GwCall {
+    pub array_or_function : String,
+    pub arguments : Vec<Box<dyn GwExpression>>
+}
+
+impl GwExpression for GwCall {
+    fn eval (&self, context : &mut EvaluationContext) -> ExpressionEvalResult {
+        panic!("Not implemented");
+    }
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str(&self.array_or_function[..]);
+        buffer.push_str("(");
+        for arg in &self.arguments {
+            arg.fill_structure_string(buffer);
+        }
+        buffer.push_str(")");        
+    }    
+}
+
+
 pub struct GwParenthesizedExpr {
     expr: Box<dyn GwExpression>
 }
@@ -249,7 +269,6 @@ impl GwExpression for GwParenthesizedExpr {
         self.expr.fill_structure_string(buffer);
         buffer.push_str(")");        
     }
-
 }
 
 pub struct GwStringLiteral {
@@ -594,7 +613,12 @@ impl GwInstruction for GwArrayAssign {
 
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&self.variable[..]);
-        buffer.push_str(&"(...) = ");
+        buffer.push_str(&"(");
+        for arg in &self.indices_expressions {
+            arg.fill_structure_string(buffer);
+        }
+
+        buffer.push_str(&") = ");
         self.expression.fill_structure_string(buffer);
     }    
 }
@@ -902,7 +926,6 @@ mod eval_tests {
         context.declare_array(String::from("A"), 10);
 
         let arr1 = context.get_existing_array(&String::from("A"), 1);
-
         
         if let ExpressionEvalResult::IntegerResult(value) = arr1.unwrap().get_value(vec![1]) {
             let some_value : i16 = 0;
