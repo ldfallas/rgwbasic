@@ -1,4 +1,5 @@
     
+use crate::eval::GwAssignableExpression;
 use crate::tokens;
 use std::str::Chars;
 use std::str::FromStr;
@@ -39,6 +40,12 @@ pub struct PushbackCharsIterator<'a> {
 }
 
 impl PushbackCharsIterator<'_> {
+    fn new(chars: Chars) -> PushbackCharsIterator {
+	PushbackCharsIterator {
+	    chars,
+	    pushed_back: None
+	}
+    }
     fn next(&mut self) -> Option<char> {
         if let Some(pushed) = self.pushed_back {
             self.pushed_back = None;
@@ -346,16 +353,24 @@ impl<'a> PushbackTokensIterator<'a> {
     }
 
 }
-
+		  
 pub enum ParserResult<T> {
     Success(T),
     Error(String),
     Nothing
 }
 
-fn parse_id_expression<'a>(iterator : &mut PushbackTokensIterator<'a>,
-                       id : String)
-                       -> ParserResult<Box<dyn GwExpression>> {
+pub enum IdExpressionResult<T> {
+    Var(GwVariableExpression),
+    Arr(GwCall),
+    Error(ParserResult<T>)
+}
+
+fn parse_id_expression_aux<'a, T>(iterator : &mut PushbackTokensIterator<'a>,
+                           id : String)
+			      -> IdExpressionResult<T>
+
+{
     if let Some(next_token) = iterator.next() {
         if let GwToken::Keyword(tokens::GwBasicToken::LparTok)  = next_token {
             let array_indices_result = 
@@ -364,23 +379,59 @@ fn parse_id_expression<'a>(iterator : &mut PushbackTokensIterator<'a>,
                                      tokens::GwBasicToken::CommaSeparatorTok);    
             if let ParserResult::Success(array) = array_indices_result {
                 if let Some(GwToken::Keyword(tokens::GwBasicToken::RparTok))  = iterator.next() {
-                    return ParserResult::Success(
-                        Box::new(
+                    return IdExpressionResult::Arr(
                             GwCall {
                                 array_or_function: id,
                                 arguments: array
-                            }));
+                            } );
                 } else {
-                    return ParserResult::Error(String::from("Right parenthesis expected"));
+                    return IdExpressionResult::Error(ParserResult::Error(String::from("Right parenthesis expected")));
                 }
             } else {
-                return ParserResult::Error(String::from("Error parsing  array indices"));
+                return IdExpressionResult::Error(ParserResult::Error(String::from("Error parsing  array indices")));
             }            
         } else {
             iterator.push_back(next_token);
         }
     }
-    return ParserResult::Success(Box::new(GwVariableExpression::with_name(id)))
+    return IdExpressionResult::Var(GwVariableExpression::with_name(id))
+}
+
+fn parse_id_expression<'a>(iterator : &mut PushbackTokensIterator<'a>,
+                           id : String)
+			   -> ParserResult<Box<dyn GwExpression>> {
+    match parse_id_expression_aux(iterator, id) {
+	IdExpressionResult::Var(variable) => ParserResult::Success(Box::new(variable)),
+	IdExpressionResult::Arr(arr_access) => ParserResult::Success(Box::new(arr_access)),
+	IdExpressionResult::Error(err) => err
+    }
+}
+
+
+fn parse_restrict_identifier_expression(iterator : &mut PushbackTokensIterator)
+                                        -> ParserResult<Box<dyn GwAssignableExpression>> {
+    //    let tmp: Box<dyn GwAssignableExpression> = Box::new(GwVariableExpression::with_name(String::from("a")));
+    //    let mut tmp = Box::new(GwVariableExpression::with_name(String::from("a")));
+    let mut result = ParserResult::Nothing;
+    if let Some(next_token) = iterator.next() {
+        if let GwToken::Identifier(id) = next_token {
+
+            match parse_id_expression_aux::<Box<dyn GwAssignableExpression>>(iterator, id) {
+                IdExpressionResult::Var(variable) => {
+		    let tmp : Box<dyn GwAssignableExpression> =
+			Box::new(variable);
+		    result = ParserResult::Success(tmp);
+		}
+                IdExpressionResult::Arr(arr_access) =>{
+		    let tmp : Box<dyn GwAssignableExpression> =
+			Box::new(arr_access);
+		    result = ParserResult::Success(tmp);
+		},
+                IdExpressionResult::Error(err) => { result = err;}
+            }
+        }
+    }
+    result
 }
 
 pub fn parse_single_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
@@ -669,13 +720,33 @@ fn parse_load_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
     }
 }
 
-
 fn parse_input_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
                         -> ParserResult<Box<dyn GwInstruction>> {
-    if let Some(GwToken::Identifier(id)) = iterator.next() {
+    let next_token = iterator.next();
+    if let Some(GwToken::String(prompt_txt)) = next_token {
+	if let Some(GwToken::Keyword(tokens::GwBasicToken::CommaSeparatorTok)) = iterator.next() {
+	    let input_vars_result =
+		parse_with_separator(iterator,
+				     parse_restrict_identifier_expression,
+				     tokens::GwBasicToken::CommaSeparatorTok);
+	    if let ParserResult::Success(input_vars) = input_vars_result {
+		return ParserResult::Success(Box::new(
+		    GwInputStat {
+			prompt: Some(prompt_txt),
+			variables: input_vars
+		    }
+		));
+	    } else {
+		return ParserResult::Error(String::from("??"));
+	    }
+	} else {
+	    return ParserResult::Error(String::from("Expecting comma"));
+	}
+    } else if let Some(GwToken::Identifier(id)) = next_token {
         return ParserResult::Success(Box::new(
             GwInputStat {
-                variable: id
+		prompt: None,
+                variables: vec![]//inputVars
             }
         ));
     } else {
@@ -1152,7 +1223,7 @@ mod parser_tests {
     #[test]
     fn it_parses_additive() {
         let str = "ab + bc";
-        let mut pb = PushbackCharsIterator {
+        let pb = PushbackCharsIterator {
             chars: str.chars(),
             pushed_back: None
         };
@@ -1203,6 +1274,27 @@ mod parser_tests {
             _ => panic!("errror")
         }        
     }
+
+    #[test]
+    fn it_parses_input() {
+        let str = "10 INPUT \"hello?\",a,b,c";
+        let mut pb = PushbackCharsIterator {
+            chars: str.chars(),
+            pushed_back: None
+        };
+        let mut tokens_iterator = PushbackTokensIterator::create(pb);
+        match parse_instruction_line(&mut tokens_iterator) {
+            ParserResult::Success(instr) => {
+                let mut buf = String::new();
+                instr.fill_structure_string(&mut buf);
+                assert_eq!(buf, String::from("(10 X = AB)"));
+            }
+            ParserResult::Error(error) => panic!(error),
+	    ParserResult::Nothing => panic!("Nothing")
+		
+        }        
+    }
+
 
     #[test]
     fn it_parses_mult_instruction_line() {
@@ -1365,6 +1457,22 @@ mod parser_tests {
             }
             _ => panic!("errror")
         }        
+    }
+
+    #[test]
+    fn it_parses_if_stat() {
+	let str = "10 IF x = 1 THEN 30";
+	let pb = PushbackCharsIterator::new(str.chars());
+	let mut tokens_iterator = PushbackTokensIterator::create(pb);
+	match parse_instruction_line(&mut tokens_iterator) {
+	    ParserResult::Success(instr) => {
+		let mut buf = String::new();
+		instr.fill_structure_string(&mut buf);
+		println!("{}", buf);
+		assert_eq!(buf, "(10 IF (X = 1) 30)");
+	    }
+	    _ => panic!("IF not parsed!")
+	}
     }
 
 

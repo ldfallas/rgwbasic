@@ -134,6 +134,10 @@ pub trait GwExpression {
     fn fill_structure_string(&self,   buffer : &mut String);
 }
 
+pub trait GwAssignableExpression : GwExpression {
+    fn assign_value(&self, value : ExpressionEvalResult, context : &mut EvaluationContext);
+}
+
 pub struct GwArray {
     values : Vec<ExpressionEvalResult>,
     element_type : GwVariableType,
@@ -232,8 +236,14 @@ pub struct GwCall {
     pub arguments : Vec<Box<dyn GwExpression>>
 }
 
+impl GwAssignableExpression for GwCall {
+    fn assign_value(&self, value : ExpressionEvalResult, context : &mut EvaluationContext) {
+	panic!("AHHHHH");
+    }
+}
+
 impl GwExpression for GwCall {
-    fn eval (&self, context : &mut EvaluationContext) -> ExpressionEvalResult {
+    fn eval (&self, _context : &mut EvaluationContext) -> ExpressionEvalResult {
         panic!("Not implemented");
     }
     fn fill_structure_string(&self, buffer : &mut String) {
@@ -337,6 +347,12 @@ impl GwExpression for GwDoubleLiteral {
 
 pub struct GwVariableExpression {
     name : String
+}
+
+impl GwAssignableExpression for GwVariableExpression {
+    fn assign_value(&self, value : ExpressionEvalResult, context : &mut EvaluationContext) {
+	panic!("AHHHHH");
+    }
 }
 
 impl GwVariableExpression {
@@ -529,12 +545,21 @@ impl GwInstruction for GwIf {
         match self.condition.eval(context) {
             ExpressionEvalResult::IntegerResult(i_result) if i_result == 0 => InstructionResult::EvaluateNext,
             ExpressionEvalResult::DoubleResult(d_result) if d_result == 0.0 => InstructionResult::EvaluateNext,
-            _ => InstructionResult::EvaluateLine(self.then_line)
+            _ => {
+		if let Some(real_line) = context.get_real_line(self.then_line) {
+		    InstructionResult::EvaluateLine(real_line)
+		} else {
+		    panic!("Jumping to a non-existing line!");
+		}
+	    }
         }        
     }
 
     fn fill_structure_string(&self, buffer : &mut String) {
-        buffer.push_str(&"IF ...");
+        buffer.push_str(&"IF ");
+	self.condition.fill_structure_string(buffer);
+	buffer.push_str(format!(" {}", self.then_line).as_str());
+
     }
 }
 
@@ -634,7 +659,7 @@ pub struct GwGotoStat {
 impl GwInstruction for GwGotoStat {
     fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
         if let Some(actual_line) =  context.get_real_line(self.line) {
-                 return InstructionResult::EvaluateLine(actual_line);
+            return InstructionResult::EvaluateLine(actual_line);
         } else {
             println!("-- {}", self.line);
             panic!("Trying to jump to non existing line");
@@ -726,14 +751,21 @@ impl GwInstruction for GwPrintStat {
 }
 
 pub struct GwInputStat {
-    pub variable : String
+    pub prompt : Option<String>,
+    pub variables : Vec<Box<dyn GwAssignableExpression>>
 }
 
 impl GwInstruction for GwInputStat {
     fn eval(&self, context : &mut EvaluationContext) -> InstructionResult {
         let mut buffer = String::new();
-        io::stdin().read_line(&mut buffer);
-        match context.get_variable_type(&self.variable) {
+	let mut pr = "?";
+	if let Some(ref prompt) = self.prompt {
+	    pr = prompt.as_str();
+	}
+	print!("{}", pr);
+	io::stdout().flush().expect("Success");
+        io::stdin().read_line(&mut buffer).expect("Success");
+/*        match context.get_variable_type(&self.variable) {
             Some(GwVariableType::Double) => {
                 context.set_variable(
                     &self.variable,
@@ -747,13 +779,13 @@ impl GwInstruction for GwInputStat {
 
             },
             _ => panic!("Not implemented INPUT for this type")
-        }
+        }*/
         InstructionResult::EvaluateNext
     }
 
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&"INPUT ");
-        buffer.push_str(&self.variable[..]);
+//        buffer.push_str(&self.variable[..]);
     }
 }
 
@@ -829,7 +861,7 @@ impl GwProgram {
     fn eval(&self, context : &mut EvaluationContext) {
         let mut current_index = 0;
         loop {
-            if current_index >= self.lines.len() {
+            if current_index >= self.lines.len() {	
                 break;
             }
 

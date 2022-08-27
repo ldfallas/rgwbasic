@@ -134,7 +134,7 @@ impl BinaryOperationEvaluator for PowEvaluator {
 fn get_double_value(value : &ExpressionEvalResult) -> Option<f32> {
     match value {
         ExpressionEvalResult::DoubleResult(val) => Some(*val),
-        ExpressionEvalResult::IntegerResult(intValue) => Some(f32::from(*intValue)),
+        ExpressionEvalResult::IntegerResult(int_value) => Some(f32::from(*int_value)),
         _ => None
     }
 }
@@ -198,6 +198,7 @@ impl GwBinaryOperation {
             GwBinaryOperationKind::Plus => buffer.push_str(" + "),
             GwBinaryOperationKind::Times => buffer.push_str(" * "),
             GwBinaryOperationKind::Minus => buffer.push_str(" - "),
+	    GwBinaryOperationKind::Equal => buffer.push_str(" = "),
             GwBinaryOperationKind::FloatDiv => buffer.push_str(" / "),            
             _ => buffer.push_str(" ?? ")
         }

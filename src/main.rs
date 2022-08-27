@@ -3,8 +3,6 @@ pub mod tokens;
 pub mod parser;
 use std::io::{self, BufRead};
 
-
-
 fn read_stdin_line(line : &mut String) -> bool {
     let stdin = io::stdin();
     let mut handle = stdin.lock();
@@ -30,9 +28,7 @@ fn main() -> io::Result<()> {
                 parser::ParserResult::Success(parsed_line) => program.add_line(parsed_line),
                 parser::ParserResult::Error(error) => println!("Error: {}", error),
                 parser::ParserResult::Nothing=> println!("Nothing")       
-
             }
-
         } else {
             match parser::parse_repl_instruction_string (uline) {
                 parser::ParserResult::Success(parsed_instr) => {
