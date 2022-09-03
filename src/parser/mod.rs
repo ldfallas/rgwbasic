@@ -720,8 +720,81 @@ fn parse_load_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
     }
 }
 
+
+macro_rules! parse_seq {
+    // default rule (the last one)
+    ($iterator: expr, {}, $action:block) => {
+	//return ParseError:Error(String::from($default_error_message));
+	$action
+    };
+    // macro_rule case for expecting a token
+    ($iterator: expr,  {
+	token($token_pattern:pat, $error_message:expr);
+	$($tail:tt)*
+    }, $action:block) => {
+	match $iterator.next() {
+	    Some($token_pattern) => {
+		parse_seq!($iterator, { $($tail)* },$action);
+	    }
+	    _ => {  return ParseError:Error(String::from($error_message)); }
+	}
+    };
+
+
+    ($iterator: expr,  {
+	opt_token($token_pattern:pat,
+		  $result_id:ident = $opt_result:expr);
+	$($tail:tt)*
+    }, $action:block) => {
+	let $result_id = match $iterator.next() {
+	    Some($token_pattern) => Some($opt_result),
+	    Some(token) => {  $iterator.push_back(token); None }
+	    _ => { None }
+	};
+	parse_seq!($iterator, { $($tail)* } , $action);
+    };
+    
+    // macro_rule case for parsing inner element
+    ($iterator: expr, {
+	parse_success($pattern:pat, $parse_expr:expr);
+	$($tail:tt)*	
+    },
+     $action: block) => {
+	match $parse_expr {
+	    ParserResult::Success($pattern) => 
+		parse_seq!($iterator, {$($tail)*}, $action),	    
+	    ParserResult::Error(error) => {
+		return ParserResult::Error(error);
+	    }
+	    ParserResult::Nothing => {
+		return ParserResult::Error(String::from("Nothing!"));
+	    }
+	}
+    };
+}
+
+
 fn parse_input_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
                         -> ParserResult<Box<dyn GwInstruction>> {
+    parse_seq![
+	iterator,
+	{
+	opt_token(GwToken::String(prompt_txt), prompt = prompt_txt);
+	opt_token(GwToken::Keyword(tokens::GwBasicToken::CommaSeparatorTok), x = 1);
+	parse_success(input_vars, parse_with_separator(iterator,
+				     parse_restrict_identifier_expression,
+						       tokens::GwBasicToken::CommaSeparatorTok));
+	},
+	{
+	    return ParserResult::Success(Box::new(
+		    GwInputStat {
+			prompt: prompt,
+			variables: input_vars
+		    }
+		));
+	}
+    ];
+    /*
     let next_token = iterator.next();
     if let Some(GwToken::String(prompt_txt)) = next_token {
 	if let Some(GwToken::Keyword(tokens::GwBasicToken::CommaSeparatorTok)) = iterator.next() {
@@ -751,7 +824,7 @@ fn parse_input_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
         ));
     } else {
         return ParserResult::Error(String::from("Expecting variable as INPUT argument"));
-    }
+    }*/
 }
 
 fn parse_if_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
@@ -1276,7 +1349,27 @@ mod parser_tests {
     }
 
     #[test]
-    fn it_parses_input() {
+    fn it_parses_input_no_prompt() -> Result<(), String> {
+        let str = "10 INPUT a";
+        let mut pb = PushbackCharsIterator {
+            chars: str.chars(),
+            pushed_back: None
+        };
+        let mut tokens_iterator = PushbackTokensIterator::create(pb);
+        match parse_instruction_line(&mut tokens_iterator) {
+            ParserResult::Success(instr) => {
+                let mut buf = String::new();
+                instr.fill_structure_string(&mut buf);
+                assert_eq!(buf, String::from("(10 INPUT A)"));
+		return Ok(());
+            }
+            ParserResult::Error(error) => { return Err(error); }
+	    ParserResult::Nothing => { return Err("Nothing".to_string()); }
+        }        
+    }
+    
+    #[test]
+    fn it_parses_input() -> Result<(), String> {
         let str = "10 INPUT \"hello?\",a,b,c";
         let mut pb = PushbackCharsIterator {
             chars: str.chars(),
@@ -1287,11 +1380,11 @@ mod parser_tests {
             ParserResult::Success(instr) => {
                 let mut buf = String::new();
                 instr.fill_structure_string(&mut buf);
-                assert_eq!(buf, String::from("(10 X = AB)"));
+                assert_eq!(buf, String::from("(10 INPUT \"hello?\",A,B,C)"));
+		return Ok(());
             }
-            ParserResult::Error(error) => panic!(error),
-	    ParserResult::Nothing => panic!("Nothing")
-		
+            ParserResult::Error(error) => { return Err(error); }
+	    ParserResult::Nothing => { return Err("Nothing".to_string()); }
         }        
     }
 

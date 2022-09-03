@@ -11,7 +11,7 @@ use std::process::exit;
 use crate::parser::ParserResult;
 use crate::parser::parse_instruction_line_from_string;
 
-enum GwVariableType {
+pub enum GwVariableType {
     Double,
     Integer,
     String
@@ -135,6 +135,7 @@ pub trait GwExpression {
 }
 
 pub trait GwAssignableExpression : GwExpression {
+    fn get_type(&self, context : &EvaluationContext) -> GwVariableType;
     fn assign_value(&self, value : ExpressionEvalResult, context : &mut EvaluationContext);
 }
 
@@ -237,6 +238,10 @@ pub struct GwCall {
 }
 
 impl GwAssignableExpression for GwCall {
+    fn get_type(&self, context : &EvaluationContext) -> GwVariableType {
+	return context.get_variable_type(&self.array_or_function).unwrap();
+    }
+    
     fn assign_value(&self, value : ExpressionEvalResult, context : &mut EvaluationContext) {
 	panic!("AHHHHH");
     }
@@ -350,8 +355,12 @@ pub struct GwVariableExpression {
 }
 
 impl GwAssignableExpression for GwVariableExpression {
+    fn get_type(&self, context : &EvaluationContext) -> GwVariableType {
+	 context.get_variable_type(&self.name).unwrap_or(GwVariableType::Double)
+    }
+    
     fn assign_value(&self, value : ExpressionEvalResult, context : &mut EvaluationContext) {
-	panic!("AHHHHH");
+        context.set_variable(&self.name, &value);
     }
 }
 
@@ -752,7 +761,20 @@ impl GwInstruction for GwPrintStat {
 
 pub struct GwInputStat {
     pub prompt : Option<String>,
-    pub variables : Vec<Box<dyn GwAssignableExpression>>
+    pub variables : Vec<Box<dyn GwAssignableExpression> >
+}
+
+fn read_variable_from_input(variable: &Box<dyn GwAssignableExpression>,
+			    context: &mut EvaluationContext,
+			    str_value: &str) {
+    match variable.get_type(context) {
+	GwVariableType::Double => {
+	    variable.assign_value(
+		ExpressionEvalResult::DoubleResult(str_value.trim_end().parse::<f32>().unwrap()),
+		context);
+        } 
+	_ => panic!("Not implemented INPUT for this type")
+    }
 }
 
 impl GwInstruction for GwInputStat {
@@ -765,27 +787,48 @@ impl GwInstruction for GwInputStat {
 	print!("{}", pr);
 	io::stdout().flush().expect("Success");
         io::stdin().read_line(&mut buffer).expect("Success");
-/*        match context.get_variable_type(&self.variable) {
-            Some(GwVariableType::Double) => {
-                context.set_variable(
-                    &self.variable,
-                    &ExpressionEvalResult::DoubleResult(buffer.trim_end().parse::<f32>().unwrap()));
-            },
-            None => {
-                // Assume `double` for non-existing variable
-                context.set_variable(
-                    &self.variable,
-                    &ExpressionEvalResult::DoubleResult(buffer.trim_end().parse::<f32>().unwrap()));
 
-            },
-            _ => panic!("Not implemented INPUT for this type")
-        }*/
+	let mut var_idx = 0;
+	for part in buffer.split(',') {
+	    read_variable_from_input(&self.variables[var_idx], context, part);
+	    var_idx = var_idx + 1;
+	}
+
+        // match context.get_variable_type(&self.variables) {
+        //     Some(GwVariableType::Double) => {
+        //         context.set_variable(
+        //             &self.variable,
+        //             &ExpressionEvalResult::DoubleResult(buffer.trim_end().parse::<f32>().unwrap()));
+        //     },
+        //     None => { 
+        //         // Assume `double` for non-existing variable
+        //         context.set_variable(
+        //             &self.variable,
+        //             &ExpressionEvalResult::DoubleResult(buffer.trim_end().parse::<f32>().unwrap()));
+
+        //     },
+        //     _ => panic!("Not implemented INPUT for this type")
+        // }
         InstructionResult::EvaluateNext
     }
 
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&"INPUT ");
-//        buffer.push_str(&self.variable[..]);
+	match &(self.prompt)  {
+	    Some(ptp) => {
+		buffer.push_str(ptp.as_str());
+		buffer.push_str(",");
+	    }
+	    _ => {}
+	}
+	let mut i = 0;
+	for variable in &self.variables {
+	    (*variable).fill_structure_string(buffer);
+	    if i != self.variables.len() - 1 {
+		buffer.push_str(",");
+	    }
+	    i = i + 1;
+	}
     }
 }
 
