@@ -154,9 +154,9 @@ impl GwArray {
         }
         let dimensions = vec![size];
         GwArray {
-            values: values,
+            values,
             element_type: array_type,
-            dimensions: dimensions
+            dimensions
         }
     }
 
@@ -189,8 +189,8 @@ impl GwParenthesizedAccessExpr {
            -> GwParenthesizedAccessExpr
     {
         GwParenthesizedAccessExpr {
-            name: name,
-            arguments: arguments
+            name,
+            arguments
         }
     }    
 }
@@ -292,10 +292,7 @@ pub struct GwStringLiteral {
 
 impl GwStringLiteral {
     pub fn with_value(value : String) -> GwStringLiteral {
-        GwStringLiteral { value: value } 
-    }
-    fn fill_structure_string(&self, buffer : &mut String) {
-        buffer.push_str(&self.value[..]);
+        GwStringLiteral { value } 
     }
 
 }
@@ -316,7 +313,7 @@ pub struct GwIntegerLiteral {
 
 impl GwIntegerLiteral {
     pub fn with_value(value : i16) -> GwIntegerLiteral {
-        GwIntegerLiteral { value : value }
+        GwIntegerLiteral { value }
     }
 }
 
@@ -335,7 +332,7 @@ pub struct GwDoubleLiteral {
 
 impl GwDoubleLiteral {
     pub fn with_value(value : f32) -> GwDoubleLiteral {
-        GwDoubleLiteral { value : value }
+        GwDoubleLiteral { value }
     }
 }
 
@@ -366,7 +363,7 @@ impl GwAssignableExpression for GwVariableExpression {
 
 impl GwVariableExpression {
     pub fn with_name(name : String) -> GwVariableExpression {
-        GwVariableExpression { name: name }
+        GwVariableExpression { name }
     }
 }
 
@@ -543,8 +540,8 @@ pub struct GwIf {
 impl GwIf {
     pub fn new(condition : Box<dyn GwExpression>, then_line : i16) -> GwIf {
         return GwIf {
-            condition: condition,
-            then_line: then_line
+            condition,
+            then_line
         };
     }
 }
