@@ -97,7 +97,26 @@ impl BinaryOperationEvaluator for EqualEvaluator {
 }
 
 
+struct DifferentEvaluator {
+}
 
+impl BinaryOperationEvaluator for DifferentEvaluator {
+    fn perform_int_operation(&self, left : i16, right : i16) -> i16 {
+        if left != right {
+            -1
+        } else {
+            0
+        }
+    }
+    
+    fn perform_double_operation(&self, left : f32, right : f32) -> f32 {
+        if left != right {
+            -1.0
+        } else {
+            0.0
+        }
+    }
+}
 
 
 struct TimesEvaluator {
@@ -181,6 +200,7 @@ impl GwBinaryOperation {
             GwBinaryOperationKind::Times => Box::new(TimesEvaluator {}),
             GwBinaryOperationKind::FloatDiv => Box::new(DivEvaluator {}),
             GwBinaryOperationKind::Equal => Box::new(EqualEvaluator {}),
+            GwBinaryOperationKind::Different => Box::new(DifferentEvaluator {}),	    
             GwBinaryOperationKind::Exponent => Box::new(PowEvaluator {}),                        
             _ => panic!("evaluator not implemented")
         };
@@ -199,7 +219,8 @@ impl GwBinaryOperation {
             GwBinaryOperationKind::Times => buffer.push_str(" * "),
             GwBinaryOperationKind::Minus => buffer.push_str(" - "),
 	    GwBinaryOperationKind::Equal => buffer.push_str(" = "),
-            GwBinaryOperationKind::FloatDiv => buffer.push_str(" / "),            
+            GwBinaryOperationKind::FloatDiv => buffer.push_str(" / "),
+            GwBinaryOperationKind::Different => buffer.push_str(" <> "),            	    
             _ => buffer.push_str(" ?? ")
         }
     }

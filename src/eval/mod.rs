@@ -1,133 +1,24 @@
-
+pub mod context;
 pub mod binary;
+pub mod while_instr;
 
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::fs::File;
-use std::io::BufReader;
+//use std::fs::File;
+//use std::io::BufReader;
 use std::io;
 use std::io::prelude::*;
 use std::process::exit;
-use crate::parser::ParserResult;
-use crate::parser::parse_instruction_line_from_string;
+//use crate::parser::ParserResult;
 
-pub enum GwVariableType {
-    Double,
-    Integer,
-    String
-}
-
-
-pub enum InstructionResult {
-    EvaluateNext,
-    EvaluateLine(i16),
-    EvaluateEnd
-}
-
-pub trait GwInstruction {
-    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult;
-    fn fill_structure_string(&self,   buffer : &mut String);
-}
-
-#[derive(Clone)]
-pub enum ExpressionEvalResult {
-    StringResult(String),
-    IntegerResult(i16),
-    DoubleResult(f32)
-}
-
-fn get_default_value_for_type(var_type : &GwVariableType) -> ExpressionEvalResult {
-    match var_type {
-        GwVariableType::String => ExpressionEvalResult::StringResult(String::from("")),
-        GwVariableType::Integer => ExpressionEvalResult::IntegerResult(0),
-        GwVariableType::Double => ExpressionEvalResult::DoubleResult(0.0)
-    }       
-}
+pub use crate::eval::context::{EvaluationContext,
+			       ExpressionEvalResult,
+			       GwVariableType,
+			       GwInstruction,
+			       GwProgram,
+			       ProgramLine,
+			       InstructionResult};
 
 
-impl ExpressionEvalResult {
-    fn to_string(&self) -> String {
-        match self {
-            ExpressionEvalResult::StringResult(some_string) => some_string.clone(),
-            ExpressionEvalResult::IntegerResult(iresult) => String::from(iresult.to_string()),
-            ExpressionEvalResult::DoubleResult(dresult) => String::from(dresult.to_string())
-            
-        }
-    }
-}
 
-pub struct EvaluationContext<'a> {
-    variables: HashMap<String, ExpressionEvalResult>,
-    array_variables: HashMap<String, GwArray>,
-    jump_table: HashMap<i16, i16>,
-    underlying_program: Option<&'a mut GwProgram>
-}
-
-impl EvaluationContext<'_>  {
-    pub fn new() -> EvaluationContext<'static>   {
-        EvaluationContext {
-            variables : HashMap::new(),
-            jump_table : HashMap::new(),
-            array_variables: HashMap::new(),
-            underlying_program: None
-        }        
-    }
-    pub fn with_program(programm : &mut GwProgram) -> EvaluationContext {
-        EvaluationContext {
-            variables : HashMap::new(),
-            jump_table : HashMap::new(),
-            array_variables: HashMap::new(),
-            underlying_program: Some(programm)
-        }
-    }
-
-    pub fn set_array_entry(&mut self, name : &String, indices : Vec<u16>, new_value : &ExpressionEvalResult) {
-        if let Some(mut_array) = self.array_variables.get_mut(name) {
-            mut_array.set_value(&indices, &new_value);
-        } else {
-            panic!("array not found");
-        }
-    }
-
-    pub fn declare_array(&mut self, name : String, size : u16) {
-        let new_array = GwArray::new_one_dimension(size, GwVariableType::Double);
-        self.array_variables.insert(name, new_array);
-    }
-
-    pub fn get_existing_array(&self, name : &String, _size : usize) -> Option<&GwArray> {
-        self.array_variables.get(name)
-    }
-
-    fn get_existing_function(&self, _name : &String, _size : usize) -> Option<&GwArray> {
-        panic!("not implemented");
-    }
-
-
-    fn get_real_line(&self, referenced_line : i16) -> Option<i16> {
-        if let Some(lin) =  self.jump_table.get(&referenced_line) {
-            Some(*lin)
-        } else {
-            None
-        }
-    }   
-    
-    fn lookup_variable(&self, name : &String) -> Option<&ExpressionEvalResult> {
-        self.variables.get(name)
-    }
-    
-    fn set_variable(&mut self, name : &String, value : &ExpressionEvalResult) {
-        self.variables.insert(name.clone(), value.clone());
-    }
-
-    fn get_variable_type(&self, name : &String) -> Option<GwVariableType> {
-        match self.lookup_variable(name) {
-            Some(ExpressionEvalResult::StringResult(_)) => Some(GwVariableType::String),
-            Some(ExpressionEvalResult::IntegerResult(_)) => Some(GwVariableType::Integer),
-            Some(ExpressionEvalResult::DoubleResult(_)) => Some(GwVariableType::Double),
-            _ => None
-        }
-    }
-}
 
 pub trait GwExpression {
     fn eval(&self, context : &mut EvaluationContext) -> ExpressionEvalResult ;
@@ -139,61 +30,21 @@ pub trait GwAssignableExpression : GwExpression {
     fn assign_value(&self, value : ExpressionEvalResult, context : &mut EvaluationContext);
 }
 
-pub struct GwArray {
-    values : Vec<ExpressionEvalResult>,
-    element_type : GwVariableType,
-    dimensions: Vec<u16>
-}
-
-impl GwArray {
-    fn new_one_dimension(size : u16, array_type : GwVariableType)
-                         -> GwArray{
-        let mut values = Vec::with_capacity(usize::from(size));
-        for _i in 0..size{
-            values.push( get_default_value_for_type(&array_type));
-        }
-        let dimensions = vec![size];
-        GwArray {
-            values,
-            element_type: array_type,
-            dimensions
-        }
-    }
-
-    pub fn get_value(&self, index_array : Vec<u16>) -> ExpressionEvalResult {
-        let mut index : u16 = 0;
-        for i in 1..self.dimensions.len() {
-            index = (index_array[i] as u16) * self.dimensions[i];
-        }
-        index = index + (index_array[index_array.len() - 1] as u16);
-        self.values[usize::from(index)].clone()
-    }
-
-    pub fn set_value(&mut self, index_array : &Vec<u16>, new_value : &ExpressionEvalResult) {
-        let mut index : u16 = 0;
-        for i in 1..self.dimensions.len() {
-            index = (index_array[i] as u16) * self.dimensions[i];
-        }
-        index = index + (index_array[index_array.len() - 1] as u16);
-        self.values[usize::from(index)] = new_value.clone();
-    }
-}
-
 pub struct GwParenthesizedAccessExpr {
     name : String,
     arguments : Vec<Box<dyn GwExpression>>
 }
 
-impl GwParenthesizedAccessExpr {
-    fn new(name : String, arguments : Vec<Box<dyn GwExpression>>)
-           -> GwParenthesizedAccessExpr
-    {
-        GwParenthesizedAccessExpr {
-            name,
-            arguments
-        }
-    }    
-}
+// impl GwParenthesizedAccessExpr {
+//     fn new(name : String, arguments : Vec<Box<dyn GwExpression>>)
+//            -> GwParenthesizedAccessExpr
+ //     {
+//         GwParenthesizedAccessExprx {
+//             name,
+//             arguments
+//         }
+//     }    
+// }
 
 fn try_to_get_integer_index(eval_result : &ExpressionEvalResult) -> Option<u16> {
     match eval_result {
@@ -226,7 +77,6 @@ impl GwExpression for GwParenthesizedAccessExpr {
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&self.name[..]);
         buffer.push_str("(");
-        //self.expr.fill_structure_string(buffer);
         buffer.push_str(")");        
     }
 
@@ -242,7 +92,9 @@ impl GwAssignableExpression for GwCall {
 	return context.get_variable_type(&self.array_or_function).unwrap();
     }
     
-    fn assign_value(&self, value : ExpressionEvalResult, context : &mut EvaluationContext) {
+    fn assign_value(&self,
+		    _value : ExpressionEvalResult,
+		    _context : &mut EvaluationContext) {
 	panic!("AHHHHH");
     }
 }
@@ -383,22 +235,14 @@ impl GwExpression for GwVariableExpression {
 }
 
 
-
-
-pub struct ProgramLine {
-    pub line : i16,
-    pub instruction : Box<dyn GwInstruction>,
-    pub rest_instructions : Option<Vec<Box<dyn GwInstruction>>>
-}
-
 impl ProgramLine {
     fn get_line(&self) -> i16 {
         self.line
     }
     
-    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult {
-         self.instruction.eval(context)
-    }
+    // fn eval (&self, context : &mut EvaluationContext) -> InstructionResult {
+    //      self.instruction.eval(self.line, context)
+    // }
 
     pub fn fill_structure_string(&self,   buffer : &mut String) {
         buffer.push('(');
@@ -420,7 +264,7 @@ pub struct GwListStat {
 }
 
 impl GwInstruction for GwListStat {
-    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self, _line: i16, context : &mut EvaluationContext) -> InstructionResult{
         if let Some(up) =  &context.underlying_program {
             up.list();
         }
@@ -438,7 +282,7 @@ pub struct GwLoadStat {
 }
 
 impl GwInstruction for GwLoadStat {
-    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self, _line: i16, context : &mut EvaluationContext) -> InstructionResult{
         let result = self.filename.eval(context);
         if let Some(up) =  &mut context.underlying_program {
             match result {
@@ -470,7 +314,7 @@ pub struct GwRunStat {
 }
 
 impl GwInstruction for GwRunStat {
-    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self, _line: i16, context : &mut EvaluationContext) -> InstructionResult{
         if let Some(program) = &context.underlying_program {
             program.run();
         }
@@ -485,7 +329,7 @@ pub struct GwSystemStat {
 }
 
 impl GwInstruction for GwSystemStat {
-    fn eval (&self, _context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self, _line: i16, _context : &mut EvaluationContext) -> InstructionResult{
         exit(0);
     }    
     fn fill_structure_string(&self, buffer : &mut String) {
@@ -510,7 +354,7 @@ impl GwDefDbl {
 }
 
 impl GwInstruction for GwDefDbl {
-    fn eval (&self, _context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self, _line: i16, _context : &mut EvaluationContext) -> InstructionResult{
         // TODO implementation pending
         InstructionResult::EvaluateNext
     }
@@ -547,7 +391,7 @@ impl GwIf {
 }
 
 impl GwInstruction for GwIf {
-    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self, _line: i16, context : &mut EvaluationContext) -> InstructionResult{
         match self.condition.eval(context) {
             ExpressionEvalResult::IntegerResult(i_result) if i_result == 0 => InstructionResult::EvaluateNext,
             ExpressionEvalResult::DoubleResult(d_result) if d_result == 0.0 => InstructionResult::EvaluateNext,
@@ -574,7 +418,7 @@ pub struct GwRem {
 }
 
 impl GwInstruction for GwRem {
-    fn eval (&self, _context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self, _line: i16, _context : &mut EvaluationContext) -> InstructionResult{
         InstructionResult::EvaluateNext
     }
 
@@ -590,7 +434,7 @@ pub struct GwCls {
 }
 
 impl GwInstruction for GwCls {
-    fn eval (&self, _context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self, _line: i16, _context : &mut EvaluationContext) -> InstructionResult{
         InstructionResult::EvaluateNext
     }
 
@@ -605,7 +449,7 @@ pub struct GwAssign {
 }
 
 impl GwInstruction for GwAssign {
-    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self, _line: i16, context : &mut EvaluationContext) -> InstructionResult{
         let expression_evaluation = self.expression.eval(context);
         context.set_variable(&self.variable, &expression_evaluation);
         InstructionResult::EvaluateNext
@@ -627,7 +471,7 @@ pub struct GwArrayAssign {
 }
 
 impl GwInstruction for GwArrayAssign {
-    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self, _line: i16, context : &mut EvaluationContext) -> InstructionResult{
         let mut evaluated_arguments = Vec::with_capacity(self.indices_expressions.len());
         for arg in &self.indices_expressions {
             let eval_index = arg.eval(context);
@@ -663,7 +507,7 @@ pub struct GwGotoStat {
 }
 
 impl GwInstruction for GwGotoStat {
-    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self, _line: i16, context : &mut EvaluationContext) -> InstructionResult{
         if let Some(actual_line) =  context.get_real_line(self.line) {
             return InstructionResult::EvaluateLine(actual_line);
         } else {
@@ -686,7 +530,7 @@ pub struct GwKeyStat {
 }
 
 impl GwInstruction for GwKeyStat {
-    fn eval (&self, _context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self, _line: i16, _context : &mut EvaluationContext) -> InstructionResult{
        InstructionResult::EvaluateNext
     }
     fn fill_structure_string(&self, buffer : &mut String) {
@@ -705,7 +549,7 @@ pub struct GwColor {
 }
 
 impl GwInstruction for GwColor {
-    fn eval (&self, _context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self, _line: i16, _context : &mut EvaluationContext) -> InstructionResult{
         InstructionResult::EvaluateNext
     }
     fn fill_structure_string(&self, buffer : &mut String) {
@@ -723,7 +567,7 @@ pub struct GwPrintStat {
 }
 
 impl GwInstruction for GwPrintStat {
-    fn eval (&self, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self, _line: i16, context : &mut EvaluationContext) -> InstructionResult{
 
         let mut result = String::new();
         for print_expr in &self.expressions {
@@ -775,7 +619,7 @@ fn read_variable_from_input(variable: &Box<dyn GwAssignableExpression>,
 }
 
 impl GwInstruction for GwInputStat {
-    fn eval(&self, context : &mut EvaluationContext) -> InstructionResult {
+    fn eval(&self, _line: i16, context : &mut EvaluationContext) -> InstructionResult {
         let mut buffer = String::new();
 	let mut pr = "?";
 	if let Some(ref prompt) = self.prompt {
@@ -830,96 +674,6 @@ impl GwInstruction for GwInputStat {
 }
 
 
-pub struct GwProgram {
-    lines : Vec<ProgramLine>,
-//    lines_index : Vec<u16>
-}
-
-impl GwProgram {
-    pub fn new() -> GwProgram {
-        GwProgram {
-            lines: Vec::new(),
-        }
-    }
-
-    pub fn load_from(&mut self, file_name : &str) -> io::Result<()> {
-        let f = File::open(file_name)?;
-        let reader = BufReader::new(f);
-        let mut line_number = 1;
-        for line in reader.lines() {
-            let uline = line.unwrap();
-            println!(">> {}", uline);
-            match parse_instruction_line_from_string(uline) {
-                ParserResult::Success(parsed_line) => self.add_line(parsed_line),
-                ParserResult::Error(error) => {println!("Line {} Error: {}", line_number, error); break;},
-                ParserResult::Nothing=> println!("Nothing")       
-            }
-            line_number = line_number + 1;
-        }
-        Ok(())
-    }
-
-    pub fn list(&self) {
-        for element in self.lines.iter() {
-            let mut string_to_print = String::new();
-            element.fill_structure_string(&mut string_to_print);
-            println!("{}", string_to_print);
-        }
-    }
-
-    pub fn run(&self) {
-        let mut table = HashMap::new();
-        let mut i = 0;
-        for e in self.lines.iter() {
-            table.insert(e.get_line(), i);
-            i = i + 1;
-        }
-        let mut context = EvaluationContext {
-            array_variables: HashMap::new(),
-            variables: HashMap::new(),
-            jump_table: table,
-            underlying_program: None
-        };
-        self.eval(&mut context);
-    }
-    
-    pub fn add_line(&mut self, new_line : ProgramLine) {
-        let mut i = 0;        
-        while i < self.lines.len() {
-            if new_line.get_line() == self.lines[i].get_line() {
-                self.lines[i] = new_line;
-                return;
-            } else if new_line.get_line() < self.lines[i].get_line() {
-                self.lines.insert(i, new_line);
-                return;
-            }
-            i = i + 1;
-        }
-        self.lines.push(new_line);
-    }
-    
-    fn eval(&self, context : &mut EvaluationContext) {
-        let mut current_index = 0;
-        loop {
-            if current_index >= self.lines.len() {	
-                break;
-            }
-
-            let eval_result = self.lines[current_index].eval(context);
-            match eval_result {
-                InstructionResult::EvaluateNext => {
-                    current_index = current_index + 1;
-                }
-                InstructionResult::EvaluateLine(new_line) => {
-                    current_index = usize::try_from(new_line).unwrap();
-                }
-                InstructionResult::EvaluateEnd => {
-                    break;
-                }
-            }            
-        }
-    }
-}
 
 
 #[cfg(test)]
@@ -957,10 +711,16 @@ mod eval_tests {
             variables: HashMap::new(),
             array_variables: HashMap::new(),
             jump_table: HashMap::new(),
-            underlying_program: None                
+            underlying_program: None,
+	    pair_instruction_table: HashMap::new(),
+	    real_lines: Some(vec![
+		&program.lines.get(0).unwrap().instruction
+	    ])
         };
 
-        context.variables.insert(String::from("X"), ExpressionEvalResult::IntegerResult(5));
+        context.variables.insert(
+	    String::from("X"),
+	    ExpressionEvalResult::IntegerResult(5));
 
         if let Some(ExpressionEvalResult::IntegerResult(value)) = context.lookup_variable(&String::from("X")) {
             let some_value : i16 = 5;
@@ -994,6 +754,7 @@ mod eval_tests {
         };
 
         let mut context = EvaluationContext::new();
+	context.real_lines = Some(vec![]);
 
         context.declare_array(String::from("A"), 10);
 

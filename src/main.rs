@@ -33,7 +33,7 @@ fn main() -> io::Result<()> {
             match parser::parse_repl_instruction_string (uline) {
                 parser::ParserResult::Success(parsed_instr) => {
                     let mut context = eval::EvaluationContext::with_program(&mut program);
-                    parsed_instr.eval(&mut context);
+                    parsed_instr.eval(-1, &mut context);
                 }
                 _ => {
                     println!("Error processing command");

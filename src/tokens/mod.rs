@@ -197,13 +197,14 @@ pub enum GwBasicToken {
     SemiColonSeparatorTok,
     LparTok,
     RparTok,
+    DifferentTok,
     Untokenized(u8)
 }
 
 
 pub struct GwTokenInfo {
     token_text : HashMap<String, GwBasicToken>,
-    token_vs_text : HashMap<GwBasicToken, String>        
+//    token_vs_text : HashMap<GwBasicToken, String>        
 }
 
 impl GwTokenInfo {
@@ -227,17 +228,20 @@ impl GwTokenInfo {
         GwTokenInfo::add_token("LOAD", GwBasicToken::LoadTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("DEFDBL", GwBasicToken::DefdblTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("REM", GwBasicToken::RemTok, &mut dict, &mut dict2);
-        GwTokenInfo::add_token("USING", GwBasicToken::UsingTok, &mut dict, &mut dict2);                
+        GwTokenInfo::add_token("USING", GwBasicToken::UsingTok, &mut dict, &mut dict2);
+ 	GwTokenInfo::add_token("WHILE", GwBasicToken::WhileTok, &mut dict, &mut dict2);
+	GwTokenInfo::add_token("WEND", GwBasicToken::WendTok, &mut dict, &mut dict2);
+	
 
         GwTokenInfo::add_token("*", GwBasicToken::TimesTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("/", GwBasicToken::DivTok, &mut dict, &mut dict2);        
-         GwTokenInfo::add_token("-", GwBasicToken::MinusTok, &mut dict, &mut dict2);
-         GwTokenInfo::add_token("+", GwBasicToken::PlusTok, &mut dict, &mut dict2);
-
+        GwTokenInfo::add_token("-", GwBasicToken::MinusTok, &mut dict, &mut dict2);
+        GwTokenInfo::add_token("+", GwBasicToken::PlusTok, &mut dict, &mut dict2);
+	GwTokenInfo::add_token("<>", GwBasicToken::DifferentTok, &mut dict, &mut dict2);
         
         GwTokenInfo {
-            token_text: dict,
-            token_vs_text: dict2
+            token_text: dict//,
+//            token_vs_text: dict2
         }
     }
 

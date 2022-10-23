@@ -26,6 +26,7 @@ use crate::eval::GwGotoStat;
 use crate::eval::GwAssign;
 use crate::eval::GwArrayAssign;
 use crate::eval::GwCall;
+use crate::eval::while_instr::{GwWhile, GwWend};
 
 use crate::eval::ProgramLine;
 use crate::eval::DefVarRange;
@@ -40,11 +41,12 @@ pub struct PushbackCharsIterator<'a> {
 }
 
 impl PushbackCharsIterator<'_> {
+    #[cfg(test)]
     fn new(chars: Chars) -> PushbackCharsIterator {
-	PushbackCharsIterator {
-	    chars,
-	    pushed_back: None
-	}
+    	PushbackCharsIterator {
+    	    chars,
+    	    pushed_back: None
+    	}
     }
     fn next(&mut self) -> Option<char> {
         if let Some(pushed) = self.pushed_back {
@@ -180,7 +182,7 @@ fn recognize_string_literal<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Op
     None
 }
 
-
+#[cfg(test)]
 fn recognize_int_number_str<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Option<i16> {
     if let Some(c) = iterator.next()  {
         if c.is_digit(10) {
@@ -330,6 +332,9 @@ impl<'a> PushbackTokensIterator<'a> {
             return Some(GwToken::Keyword(tokens::GwBasicToken::RparTok));                        
         } else if recognize_specific_char(&mut self.chars_iterator, ':') {
             return Some(GwToken::Keyword(tokens::GwBasicToken::ColonSeparatorTok));
+        } else if recognize_specific_char(&mut self.chars_iterator, '<')
+                  && recognize_specific_char(&mut self.chars_iterator, '>') {
+            return Some(GwToken::Keyword(tokens::GwBasicToken::DifferentTok));    
         } else if recognize_specific_char(&mut self.chars_iterator, ';') {
             return Some(GwToken::Keyword(tokens::GwBasicToken::SemiColonSeparatorTok));
         } else if recognize_specific_char(&mut self.chars_iterator, ',') {
@@ -544,6 +549,7 @@ fn get_operation_kind_from_token(token : &tokens::GwBasicToken)
         tokens::GwBasicToken::TimesTok => Some(GwBinaryOperationKind::Times),
         tokens::GwBasicToken::DivTok => Some(GwBinaryOperationKind::FloatDiv),
         tokens::GwBasicToken::EqlTok => Some(GwBinaryOperationKind::Equal),
+        tokens::GwBasicToken::DifferentTok => Some(GwBinaryOperationKind::Different),	
         tokens::GwBasicToken::PowOperatorTok => Some(GwBinaryOperationKind::Exponent),        
         _ => None
     }
@@ -599,11 +605,13 @@ pub fn parse_additive_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
 
 
 fn is_comparison_operation_token(token : &GwToken)
-                                 -> Option<tokens::GwBasicToken> {
+                                 -> Option<&tokens::GwBasicToken> {
     match token {
         GwToken::Keyword(tok@tokens::GwBasicToken::EqlTok) =>
-            Some(tok.clone()),
-        _ => None
+            Some(tok),
+        GwToken::Keyword(tok@tokens::GwBasicToken::DifferentTok) =>
+            Some(tok),
+        _ => None	    
     }
 }
 
@@ -736,7 +744,7 @@ macro_rules! parse_seq {
 	    Some($token_pattern) => {
 		parse_seq!($iterator, { $($tail)* },$action);
 	    }
-	    _ => {  return ParseError:Error(String::from($error_message)); }
+	    _ => {  return ParserResult::Error(String::from($error_message)); }
 	}
     };
 
@@ -774,13 +782,38 @@ macro_rules! parse_seq {
 }
 
 
+fn parse_while_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
+			-> ParserResult<Box<dyn GwInstruction>> {
+
+    parse_seq![
+	iterator,
+	{
+	    parse_success(condition, parse_expression(iterator));
+	},
+	{
+	    return ParserResult::Success(
+		Box::new(
+		    GwWhile {
+			condition
+		    }
+		)
+	    );
+	}
+    ]
+}
+
+fn parse_wend_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
+		       -> ParserResult<Box<dyn GwInstruction>> {
+    return ParserResult::Success(Box::new(GwWend{}));    
+}
+
 fn parse_input_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
                         -> ParserResult<Box<dyn GwInstruction>> {
     parse_seq![
 	iterator,
 	{
 	opt_token(GwToken::String(prompt_txt), prompt = prompt_txt);
-	opt_token(GwToken::Keyword(tokens::GwBasicToken::CommaSeparatorTok), x = 1);
+	opt_token(GwToken::Keyword(tokens::GwBasicToken::CommaSeparatorTok), _x = 1);
 	parse_success(input_vars, parse_with_separator(iterator,
 				     parse_restrict_identifier_expression,
 						       tokens::GwBasicToken::CommaSeparatorTok));
@@ -1127,7 +1160,10 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
             GwToken::Keyword(tokens::GwBasicToken::LoadTok)  => parse_load_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::IfTok)  => parse_if_stat(iterator),                        
             GwToken::Keyword(tokens::GwBasicToken::SystemTok)  => parse_system_stat(iterator),
-            GwToken::Keyword(tokens::GwBasicToken::InpTok)  => parse_input_stat(iterator),            
+            GwToken::Keyword(tokens::GwBasicToken::InpTok)  => parse_input_stat(iterator),
+	    GwToken::Keyword(tokens::GwBasicToken::WhileTok) => parse_while_stat(iterator),
+	    GwToken::Keyword(tokens::GwBasicToken::WendTok) => parse_wend_stat(iterator),	    
+	    
             GwToken::Identifier(var_name) => parse_assignment(iterator, var_name),
             _ => panic!("Not implemented parsing for non-assigment")
         }
@@ -1312,9 +1348,28 @@ mod parser_tests {
     }
 
     #[test]
+    fn it_parses_different() {
+        let str = "ab <> bc";
+        let pb = PushbackCharsIterator {
+            chars: str.chars(),
+            pushed_back: None
+        };
+        let mut tokens_iterator = PushbackTokensIterator::create(pb);
+        match parse_expression(&mut tokens_iterator) {
+            ParserResult::Success(expr) => {
+                let mut buf = String::new();
+                expr.fill_structure_string(&mut buf);
+                assert_eq!(buf, String::from("(AB <> BC)"));
+            }
+            _ => panic!("errror")
+        }        
+    }
+
+
+    #[test]
     fn it_parses_minus() {
         let str = "ab - bc";
-        let mut pb = PushbackCharsIterator {
+        let pb = PushbackCharsIterator {
             chars: str.chars(),
             pushed_back: None
         };
@@ -1333,7 +1388,7 @@ mod parser_tests {
     #[test]
     fn it_parses_assignment_instruction() {
         let str = "10 x = ab";
-        let mut pb = PushbackCharsIterator {
+        let pb = PushbackCharsIterator {
             chars: str.chars(),
             pushed_back: None
         };
@@ -1351,7 +1406,7 @@ mod parser_tests {
     #[test]
     fn it_parses_input_no_prompt() -> Result<(), String> {
         let str = "10 INPUT a";
-        let mut pb = PushbackCharsIterator {
+        let pb = PushbackCharsIterator {
             chars: str.chars(),
             pushed_back: None
         };
@@ -1371,7 +1426,7 @@ mod parser_tests {
     #[test]
     fn it_parses_input() -> Result<(), String> {
         let str = "10 INPUT \"hello?\",a,b,c";
-        let mut pb = PushbackCharsIterator {
+        let pb = PushbackCharsIterator {
             chars: str.chars(),
             pushed_back: None
         };
@@ -1392,7 +1447,7 @@ mod parser_tests {
     #[test]
     fn it_parses_mult_instruction_line() {
         let str = "10 x = ab : y = bc : z = cd";
-        let mut pb = PushbackCharsIterator {
+        let pb = PushbackCharsIterator {
             chars: str.chars(),
             pushed_back: None
         };
@@ -1413,7 +1468,7 @@ mod parser_tests {
     #[test]
     fn it_parses_additive_three() {
         let str = "ab + bc + cd";
-        let mut pb = PushbackCharsIterator {
+        let pb = PushbackCharsIterator {
             chars: str.chars(),
             pushed_back: None
         };
@@ -1431,7 +1486,7 @@ mod parser_tests {
     #[test]
     fn it_parses_a_sequence_with_separator() {
         let str = "ab , 12 , a + cd";
-        let mut pb = PushbackCharsIterator {
+        let pb = PushbackCharsIterator {
             chars: str.chars(),
             pushed_back: None
         };
@@ -1461,7 +1516,7 @@ mod parser_tests {
     #[test]
     fn it_parses_a_sequence_with_flexible_separator() {
         let str = "ab ; 12 ;; a + cd;";
-        let mut pb = PushbackCharsIterator {
+        let pb = PushbackCharsIterator {
             chars: str.chars(),
             pushed_back: None
         };
@@ -1568,6 +1623,21 @@ mod parser_tests {
 	}
     }
 
+    #[test]
+    fn it_parses_while_stat() {
+	let str = "10 WHILE x = 1";
+	let pb = PushbackCharsIterator::new(str.chars());
+	let mut tokens_iterator = PushbackTokensIterator::create(pb);
+	match parse_instruction_line(&mut tokens_iterator) {
+	    ParserResult::Success(instr) => {
+		let mut buf = String::new();
+		instr.fill_structure_string(&mut buf);
+		println!("{}", buf);
+		assert_eq!(buf, "(10 WHILE (X = 1))");
+	    }
+	    _ => panic!("WHILE not parsed!")
+	}
+    }    
 
     #[test]
     fn it_identifies_numbers() {
