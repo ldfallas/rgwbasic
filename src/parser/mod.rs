@@ -1210,7 +1210,6 @@ pub fn parse_instruction_line_from_string(line : String)
 fn parse_same_line_instruction_sequence<'a>(iterator : &mut PushbackTokensIterator<'a>)
                                             -> ParserResult<Vec<Box<dyn GwInstruction>>> {
     if let Some(next_tok) = iterator.next() {
-                            println!(">>>>> {:?}", next_tok);
         if let GwToken::Keyword(tokens::GwBasicToken::ColonSeparatorTok) = next_tok {
             iterator.push_back(next_tok);
             return parsing_same_line_instruction_sequence(iterator)

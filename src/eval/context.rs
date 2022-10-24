@@ -79,8 +79,8 @@ impl EvaluationContext<'_>  {
             jump_table : HashMap::new(),
             array_variables: HashMap::new(),
             underlying_program: None,
-	    pair_instruction_table: HashMap::new(),
-	    real_lines: None
+            pair_instruction_table: HashMap::new(),
+            real_lines: None
         }        
     }
     pub fn with_program(program : &mut GwProgram) -> EvaluationContext {
@@ -89,8 +89,8 @@ impl EvaluationContext<'_>  {
             jump_table : HashMap::new(),
             array_variables: HashMap::new(),
             underlying_program: Some(program),
-	    pair_instruction_table: HashMap::new(),
-	    real_lines: None
+            pair_instruction_table: HashMap::new(),
+            real_lines: None
         }
     }
 
@@ -234,23 +234,23 @@ impl GwProgram {
             variables: HashMap::new(),
             jump_table: table,
             underlying_program: None,
-	    pair_instruction_table: HashMap::new(),
-	    real_lines: Some(vec![])
+            pair_instruction_table: HashMap::new(),
+            real_lines: Some(vec![])
         };
-	//	for j in 1..self.lines.len() {
+        //      for j in 1..self.lines.len() {
         
-	{
-	let real_lines = &mut context.real_lines.as_mut().expect("the vec");
-	for e in self.lines.iter() {
-	    real_lines.push(&e.instruction);
-	    if let Some(ref rest) = e.rest_instructions {
-		for nested in rest {
-		    real_lines.push(&nested);
-		}
-	    }	    
-	}
-	}
-	
+        {
+            let real_lines = &mut context.real_lines.as_mut().expect("the vec");
+            for e in self.lines.iter() {
+                real_lines.push(&e.instruction);
+                if let Some(ref rest) = e.rest_instructions {
+                    for nested in rest {
+                        real_lines.push(&nested);
+                    }
+                }           
+            }
+        }
+        
         self.eval(&mut context);
     }
     
@@ -272,8 +272,8 @@ impl GwProgram {
     pub fn eval(&self, context : &mut EvaluationContext) {
         let mut current_index = 0;
         loop {
-	    let real_lines = &context.real_lines.as_ref().expect("real_lines calculated");
-            if current_index >= real_lines.len() {	
+            let real_lines = &context.real_lines.as_ref().expect("real_lines calculated");
+            if current_index >= real_lines.len() {      
                 break;
             }
 
@@ -288,10 +288,10 @@ impl GwProgram {
                 InstructionResult::EvaluateEnd => {
                     break;
                 },
-		InstructionResult::EvaluateToError(error_message) => {
-		    println!("RUNTIME ERROR: {}", error_message);
-		    break;
-		}
+                InstructionResult::EvaluateToError(error_message) => {
+                    println!("RUNTIME ERROR: {}", error_message);
+                    break;
+                }
             }            
         }
     }
