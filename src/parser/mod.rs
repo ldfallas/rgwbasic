@@ -33,6 +33,7 @@ use crate::eval::DefVarRange;
 use crate::eval::GwDefDbl;
 use crate::eval::GwRem;
 use crate::eval::GwParenthesizedExpr;
+use crate::eval::GwNegExpr;
 
 
 pub struct PushbackCharsIterator<'a> {
@@ -443,7 +444,6 @@ pub fn parse_single_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
                                    -> ParserResult<Box<dyn GwExpression>> {
     if let Some(next_token) = iterator.next() {
         if let GwToken::Identifier(id) = next_token {
-            //return ParserResult::Success(Box::new(GwVariableExpression::with_name(id)))
             return parse_id_expression(iterator, id);
         } else if let GwToken::Integer(i_val) = next_token {
             return ParserResult::Success(Box::new(GwIntegerLiteral::with_value(i_val)))
@@ -451,12 +451,10 @@ pub fn parse_single_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
             return ParserResult::Success(Box::new(GwDoubleLiteral::with_value(d_val)))                
         } else if let GwToken::String(str_val) = next_token {
             return ParserResult::Success(Box::new(GwStringLiteral::with_value(str_val)))
-        // } else {
-        //     ParserResult::Error(String::from(format!("Unexpected token parsing single expression:  {:?}", next_token)))
-        // }
-//    } else {
         } else if let GwToken::Keyword(tokens::GwBasicToken::LparTok) = next_token {
             return parse_parenthesized_expression(iterator);
+        } else if let GwToken::Keyword(tokens::GwBasicToken::MinusTok) = next_token {
+            return parse_negation_expression(iterator);
         } else {
             iterator.push_back(next_token);
         }
@@ -476,6 +474,19 @@ fn parse_parenthesized_expression<'a>(iterator : &mut PushbackTokensIterator<'a>
         return ParserResult::Error(String::from("Expecting expression on parenthesized expression"));
     }
 }
+
+fn parse_negation_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
+                                      -> ParserResult<Box<dyn GwExpression>> {
+    if let ParserResult::Success(inner_expr) = parse_single_expression(iterator) {
+        return ParserResult::Success(
+            Box::new(GwNegExpr {
+                expr: inner_expr
+            } ));
+    } else {
+        return ParserResult::Error(String::from("Expecting single expression on negation"));
+    }
+}
+
 
 fn one_kw_token_of<'a>(token : &'a GwToken, t1 : &'a tokens::GwBasicToken, t2 : &'a tokens::GwBasicToken) -> Option<&'a tokens::GwBasicToken>{
     match token  {
@@ -1589,6 +1600,24 @@ mod parser_tests {
     }
 
     #[test]
+    fn it_parser_negative_operator() {
+        let str =  "-(1+1)";
+        let  pb = PushbackCharsIterator {
+            chars: str.chars(),
+            pushed_back: None
+        };
+        let mut tokens_iterator = PushbackTokensIterator::create(pb);
+        match parse_expression(&mut tokens_iterator) {
+            ParserResult::Success(expr) => {
+                let mut buf = String::new();
+                expr.fill_structure_string(&mut buf);
+                assert_eq!(buf, String::from("-((1 + 1))"));
+            }
+            _ => panic!("errror")
+        }                
+    }
+
+    #[test]
     fn it_parses_array_assignment() {
         let str = "myarr(x + 1, otherarr(30)) = 20";
         let  pb = PushbackCharsIterator {
@@ -1677,5 +1706,6 @@ mod parser_tests {
             _ => assert!(false)
         }
     }
+
 
 }

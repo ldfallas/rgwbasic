@@ -114,6 +114,26 @@ impl GwExpression for GwCall {
     }    
 }
 
+pub struct GwNegExpr {
+    pub expr: Box<dyn GwExpression>
+}
+
+impl GwExpression for GwNegExpr {
+    fn eval (&self, context : &mut EvaluationContext) -> ExpressionEvalResult {
+        match self.expr.eval(context) {
+            ExpressionEvalResult::IntegerResult(value) =>
+                ExpressionEvalResult::IntegerResult(-1 * value),
+            ExpressionEvalResult::DoubleResult(value) =>
+                ExpressionEvalResult::DoubleResult(-1.0 * value),            
+            _ => {panic!("incorrect type")}
+        }
+    }
+    fn fill_structure_string(&self, buffer : &mut String) {        
+        buffer.push_str("-");
+        self.expr.fill_structure_string(buffer);
+    }
+}
+
 
 pub struct GwParenthesizedExpr {
     expr: Box<dyn GwExpression>
@@ -737,6 +757,34 @@ mod eval_tests {
     }
 
     #[test]
+    fn it_negates_integer_expressions() {
+        let negation = GwNegExpr {
+            expr: Box::new(GwIntegerLiteral::with_value(1))
+        };
+
+        let mut context = empty_context();
+
+        match negation.eval(&mut context) {
+            ExpressionEvalResult::IntegerResult(x) => assert_eq!(x, -1),
+            _ => assert!(false)
+        }
+    }
+
+    #[test]
+    fn it_negates_double_expressions() {
+        let negation = GwNegExpr {
+            expr: Box::new(GwDoubleLiteral::with_value(2.5))
+        };
+
+        let mut context = empty_context();
+
+        match negation.eval(&mut context) {
+            ExpressionEvalResult::DoubleResult(x) => assert_eq!(x, -2.5),
+            _ => assert!(false)
+        }
+    }    
+
+    #[test]
     fn it_tests_basic_array_eval() {
         let line1 = ProgramLine {
             line: 10,
@@ -774,6 +822,19 @@ mod eval_tests {
             let some_value : i16 = 12;
             assert_eq!(some_value, value);
         }        
+    }
+
+
+
+    fn empty_context() -> EvaluationContext<'static> {
+        EvaluationContext {
+            variables: HashMap::new(),
+            array_variables: HashMap::new(),
+            jump_table: HashMap::new(),
+            underlying_program: None,
+	    pair_instruction_table: HashMap::new(),
+	    real_lines: None
+        }
     }
 
 }

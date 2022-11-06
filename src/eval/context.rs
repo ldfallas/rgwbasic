@@ -70,7 +70,10 @@ pub struct EvaluationContext<'a> {
     pub underlying_program: Option<&'a mut GwProgram>,   
     pub pair_instruction_table: HashMap<i16, i16>,
     pub real_lines: Option<Vec<& 'a Box<dyn GwInstruction>>>,
+//    pub built_in_functions: HashMap<String, GwFunction>
 }
+
+
 
 impl EvaluationContext<'_>  {
     pub fn new() -> EvaluationContext<'static>   {
