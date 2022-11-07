@@ -107,12 +107,39 @@ impl GwExpression for GwCall {
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&self.array_or_function[..]);
         buffer.push_str("(");
+        let mut i = 0;
         for arg in &self.arguments {
             arg.fill_structure_string(buffer);
+            if i != &self.arguments.len() - 1 {
+                buffer.push(',')
+            }
+            i = i + 1
         }
         buffer.push_str(")");        
     }    
 }
+
+pub struct GwLog {
+    pub expr: Box<dyn GwExpression>
+}
+
+impl GwExpression for GwLog {
+    fn eval(&self, context: &mut EvaluationContext) -> ExpressionEvalResult {
+        match self.expr.eval(context) {
+            ExpressionEvalResult::IntegerResult(value) =>
+                ExpressionEvalResult::DoubleResult((value as f32).ln()),
+            ExpressionEvalResult::DoubleResult(value) =>
+                ExpressionEvalResult::DoubleResult(value.ln()), 
+            _ => {panic!("incorrect type")}
+        }
+    }
+    fn fill_structure_string(&self, buffer : &mut String) {        
+        buffer.push_str("LOG(");
+        self.expr.fill_structure_string(buffer);
+        buffer.push(')')
+    }  
+}
+
 
 pub struct GwNegExpr {
     pub expr: Box<dyn GwExpression>

@@ -27,7 +27,7 @@ use crate::eval::GwAssign;
 use crate::eval::GwArrayAssign;
 use crate::eval::GwCall;
 use crate::eval::while_instr::{GwWhile, GwWend};
-
+use crate::eval::GwLog;
 use crate::eval::ProgramLine;
 use crate::eval::DefVarRange;
 use crate::eval::GwDefDbl;
@@ -369,7 +369,23 @@ pub enum ParserResult<T> {
 pub enum IdExpressionResult<T> {
     Var(GwVariableExpression),
     Arr(GwCall),
+    Builtin(Box<dyn GwExpression>),
     Error(ParserResult<T>)
+}
+
+fn is_builtin_function(func_name: &String) -> bool {
+    match func_name.as_str() {
+        "LOG" => true,
+        _ => false        
+    }
+}
+fn create_builtin_function(func_name: &String, args: Vec<Box<dyn GwExpression>>)
+                           -> Option<Box<dyn GwExpression>> {
+    let mut mut_args = args;
+    match func_name.as_str() {
+        "LOG" if mut_args.len() == 1 => Some(Box::new(GwLog { expr: mut_args.remove(0) })),
+        _ => None
+    }   
 }
 
 fn parse_id_expression_aux<'a, T>(iterator : &mut PushbackTokensIterator<'a>,
@@ -385,11 +401,15 @@ fn parse_id_expression_aux<'a, T>(iterator : &mut PushbackTokensIterator<'a>,
                                      tokens::GwBasicToken::CommaSeparatorTok);    
             if let ParserResult::Success(array) = array_indices_result {
                 if let Some(GwToken::Keyword(tokens::GwBasicToken::RparTok))  = iterator.next() {
-                    return IdExpressionResult::Arr(
+                    if is_builtin_function(&id) {
+                        return IdExpressionResult::Builtin(create_builtin_function(&id, array).expect("Builtin function not created"))
+                    } else {
+                        return IdExpressionResult::Arr(
                             GwCall {
                                 array_or_function: id,
                                 arguments: array
                             } );
+                    }
                 } else {
                     return IdExpressionResult::Error(ParserResult::Error(String::from("Right parenthesis expected")));
                 }
@@ -409,6 +429,7 @@ fn parse_id_expression<'a>(iterator : &mut PushbackTokensIterator<'a>,
     match parse_id_expression_aux(iterator, id) {
 	IdExpressionResult::Var(variable) => ParserResult::Success(Box::new(variable)),
 	IdExpressionResult::Arr(arr_access) => ParserResult::Success(Box::new(arr_access)),
+        IdExpressionResult::Builtin(builtin) => ParserResult::Success(builtin),
 	IdExpressionResult::Error(err) => err
     }
 }
@@ -433,6 +454,7 @@ fn parse_restrict_identifier_expression(iterator : &mut PushbackTokensIterator)
 			Box::new(arr_access);
 		    result = ParserResult::Success(tmp);
 		},
+                IdExpressionResult::Builtin(_) => { result = ParserResult::Error(String::from("Cannot assign to builtin function")) },
                 IdExpressionResult::Error(err) => { result = err;}
             }
         }
@@ -1616,6 +1638,26 @@ mod parser_tests {
             _ => panic!("errror")
         }                
     }
+
+    #[test]
+    fn it_parser_call_expression() {
+        let str =  "FNFUNC(1,2)";
+        let  pb = PushbackCharsIterator {
+            chars: str.chars(),
+            pushed_back: None
+        };
+        let mut tokens_iterator = PushbackTokensIterator::create(pb);
+        match parse_expression(&mut tokens_iterator) {
+            ParserResult::Success(expr) => {
+                let mut buf = String::new();
+                expr.fill_structure_string(&mut buf);
+                assert_eq!(buf, String::from("FNFUNC(1,2)"));
+            }
+            _ => panic!("errror")
+        }                
+    }
+
+    
 
     #[test]
     fn it_parses_array_assignment() {
