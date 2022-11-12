@@ -8,6 +8,7 @@ fn read_stdin_line(line : &mut String) -> bool {
     let mut handle = stdin.lock();
     let mut tmp_line = String::new();
     match handle.read_line(&mut tmp_line) {
+        Ok(0) => false,
         Ok(_) => {
             line.push_str(tmp_line.trim_end());
             true
@@ -35,6 +36,9 @@ fn main() -> io::Result<()> {
                     let mut context = eval::EvaluationContext::with_program(&mut program);
                     parsed_instr.eval(-1, &mut context);
                 }
+                parser::ParserResult::Error(msg) => {
+                    println!("Error parsing command {}", msg);
+                }
                 _ => {
                     println!("Error processing command");
                 }
@@ -42,8 +46,7 @@ fn main() -> io::Result<()> {
             
         }
         uline = String::new();
-        success = read_stdin_line(&mut uline)                
-
+        success = read_stdin_line(&mut uline);
     }
     
     Ok(())
