@@ -27,13 +27,14 @@ use crate::eval::GwAssign;
 use crate::eval::GwArrayAssign;
 use crate::eval::GwCall;
 use crate::eval::while_instr::{GwWhile, GwWend};
-use crate::eval::GwLog;
+use crate::eval::{GwLog, GwInt};
 use crate::eval::ProgramLine;
 use crate::eval::DefVarRange;
 use crate::eval::GwDefDbl;
 use crate::eval::GwRem;
 use crate::eval::GwParenthesizedExpr;
 use crate::eval::GwNegExpr;
+use crate::eval::PrintSeparator;
 
 
 pub struct PushbackCharsIterator<'a> {
@@ -376,6 +377,7 @@ pub enum IdExpressionResult<T> {
 fn is_builtin_function(func_name: &String) -> bool {
     match func_name.as_str() {
         "LOG" => true,
+        "INT" => true,
         _ => false        
     }
 }
@@ -384,6 +386,7 @@ fn create_builtin_function(func_name: &String, args: Vec<Box<dyn GwExpression>>)
     let mut mut_args = args;
     match func_name.as_str() {
         "LOG" if mut_args.len() == 1 => Some(Box::new(GwLog { expr: mut_args.remove(0) })),
+        "INT" if mut_args.len() == 1 => Some(Box::new(GwInt { expr: mut_args.remove(0) })),        
         _ => None
     }   
 }
@@ -736,8 +739,7 @@ fn parse_print_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
     if let ParserResult::Success(exprs) =
         parse_with_flexible_separator(
             iterator,
-            parse_expression,
-            tokens::GwBasicToken::SemiColonSeparatorTok) {
+            parse_expression) {
         return ParserResult::Success(Box::new(
             GwPrintStat {
                 expressions: exprs
@@ -1044,32 +1046,51 @@ fn parse_with_separator<'a, F,T>(
 //
 fn parse_with_flexible_separator<'a, F,T>(
     iterator : &mut PushbackTokensIterator<'a>,
-    item_parse_fn  : F,
-    separator : tokens::GwBasicToken) ->
-     ParserResult<Vec<Option<T>>>
+    item_parse_fn  : F) ->
+     ParserResult<Vec<(Option<T>, Option<PrintSeparator>)>>
   where F : Fn(&mut PushbackTokensIterator<'a>) -> ParserResult<T>  {
     let mut result = Vec::new();
     loop {
-        let item_result = item_parse_fn(iterator);
-        match item_result {
+        let mut item_result: Option<T> = None;
+        match item_parse_fn(iterator) {
             ParserResult::Success(item) => {
-                result.push(Some(item));
+                item_result = Some(item);
             },
             ParserResult::Error(error) => {
                 return ParserResult::Error(error);
             },
             ParserResult::Nothing => {
-                result.push(None);
             }
         }
         let next_token = iterator.next();
-        match next_token {
-            Some(GwToken::Keyword(kw_tok)) if separator == kw_tok => continue,
-            Some(token_result) => {
-                iterator.push_back(token_result);
+        match (next_token, &item_result) {
+            (Some(GwToken::Keyword(tokens::GwBasicToken::SemiColonSeparatorTok)), _) => {
+                result.push((item_result, Some(PrintSeparator::Semicolon)));
+                continue;
+            }
+            (Some(GwToken::Keyword(tokens::GwBasicToken::CommaSeparatorTok)), _) => {
+                result.push((item_result, Some(PrintSeparator::Comma)));
+                continue;
+            }
+            (Some(next@GwToken::Keyword(tokens::GwBasicToken::ColonSeparatorTok)), None) => { 
+                iterator.push_back(next);
                 break;
             },
-            _ => break
+            (Some(next@GwToken::Keyword(tokens::GwBasicToken::ColonSeparatorTok)), _) => { 
+                iterator.push_back(next);
+                result.push((item_result, None));                
+                break;
+            },
+            (Some(token_result), _) => {
+                iterator.push_back(token_result);
+                result.push((item_result, None));
+                continue;
+            },
+            (_, Some(_)) => {
+                result.push((item_result, None));
+                break;
+            }
+            (_, None) => break,            
         }
     }
     return ParserResult::Success(result);
@@ -1554,31 +1575,111 @@ mod parser_tests {
         };
         let mut tokens_iterator = PushbackTokensIterator::create(pb);
         match parse_with_flexible_separator(&mut tokens_iterator,
-                                   parse_expression,
-                                   tokens::GwBasicToken::SemiColonSeparatorTok) {
+                                   parse_expression)  {
             ParserResult::Success(vect) => {
-                assert_eq!(5, vect.len());
-                let mut buf = String::new();
-                vect[0].as_ref().unwrap().fill_structure_string(&mut buf);
-                assert_eq!(buf, String::from("AB"));
-
-                let mut buf = String::new();
-                vect[1].as_ref().unwrap().fill_structure_string(&mut buf);
-                assert_eq!(buf, String::from("12"));
-
-                let mut buf = String::new();
-                vect[3].as_ref().unwrap().fill_structure_string(&mut buf);
-                assert_eq!(buf, String::from("(A + CD)"));               
+                match vect[..] {
+                    [(Some(ref arg1), Some(PrintSeparator::Semicolon)),
+                     (Some(ref arg2), Some(PrintSeparator::Semicolon)),
+                     (None,           Some(PrintSeparator::Semicolon)),
+                     (Some(ref arg3), Some(PrintSeparator::Semicolon))
+                    ] => {
+                        let mut buf = String::new();
+                        arg1.fill_structure_string(&mut buf);
+                        assert_eq!(buf, "AB");
+                        buf.clear();
+                        arg2.fill_structure_string(&mut buf);
+                        assert_eq!(buf, "12");
+                        buf.clear();
+                        arg3.fill_structure_string(&mut buf);
+                        assert_eq!(buf, "(A + CD)");
+                    }
+                    _ => { assert!(false); }
+                }
             },
-            ParserResult::Error(err) => {
-                panic!("Error {} ", err);
+            _ => assert!(false)
+        }                
+    }
+
+    #[test]
+    fn it_parses_a_sequence_for_print_separators() {
+        let str = "ab , 1 2 cd";
+        let pb = PushbackCharsIterator {
+            chars: str.chars(),
+            pushed_back: None
+        };
+        let mut tokens_iterator = PushbackTokensIterator::create(pb);
+        match parse_with_flexible_separator(&mut tokens_iterator,
+                                            parse_expression)  {
+            ParserResult::Success(vect) => {
+                match vect[..] {
+                    [(Some(ref arg1), Some(PrintSeparator::Comma)),
+                     (Some(ref arg2), None),
+                     (Some(ref arg3), None),
+                     (Some(ref arg4), None)
+                    ] => {
+                        let mut buf = String::new();
+                        arg1.fill_structure_string(&mut buf);
+                        assert_eq!(buf, "AB");
+                        buf.clear();
+                        arg2.fill_structure_string(&mut buf);
+                        assert_eq!(buf, "1");
+                        buf.clear();
+                        arg3.fill_structure_string(&mut buf);
+                        assert_eq!(buf, "2");
+                        buf.clear();
+                        arg4.fill_structure_string(&mut buf);
+                        assert_eq!(buf, "CD");                        
+                    }
+                    _ => { assert!(false); }
+                }
             },
-            _ => panic!("errror")
-        }        
+            _ => assert!(false)
+        }                
+    }
+
+    #[test]
+    fn it_parses_one_element_print() {
+        let str = "ab";
+        let pb = PushbackCharsIterator {
+            chars: str.chars(),
+            pushed_back: None
+        };
+        let mut tokens_iterator = PushbackTokensIterator::create(pb);
+        match parse_with_flexible_separator(&mut tokens_iterator,
+                                            parse_expression)  {
+            ParserResult::Success(vect) => {
+                match vect[..] {
+                    [(Some(ref arg1), None)] => {
+                        let mut buf = String::new();
+                        arg1.fill_structure_string(&mut buf);
+                        assert_eq!(buf, "AB");
+                    }
+                    _ => {  assert!(false); }
+                }
+            },
+            _ => assert!(false)
+        }                
     }
     
-    //
-
+    #[test]
+    fn it_parses_empty_sequence_for_print() {
+        let str = " ";
+        let pb = PushbackCharsIterator {
+            chars: str.chars(),
+            pushed_back: None
+        };
+        let mut tokens_iterator = PushbackTokensIterator::create(pb);
+        match parse_with_flexible_separator(&mut tokens_iterator,
+                                            parse_expression)  {
+            ParserResult::Success(vect) => {
+                match vect[..] {
+                    [] => { assert!(true); }
+                    _ => {  assert!(false); }
+                }
+            },
+            _ => assert!(false)
+        }                
+    }
     
     #[test]
     fn it_parses_color() {

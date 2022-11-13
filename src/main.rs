@@ -20,7 +20,6 @@ fn read_stdin_line(line : &mut String) -> bool {
 fn main() -> io::Result<()> {
     let mut program = eval::GwProgram::new();
     println!("Ok");
-    //for line in stdinLock.lines() {
     let mut uline = String::new();
     let mut success = read_stdin_line(&mut uline);
     while success {

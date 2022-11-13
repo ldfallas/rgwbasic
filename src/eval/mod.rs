@@ -126,15 +126,36 @@ pub struct GwLog {
 impl GwExpression for GwLog {
     fn eval(&self, context: &mut EvaluationContext) -> ExpressionEvalResult {
         match self.expr.eval(context) {
-            ExpressionEvalResult::IntegerResult(value) =>
-                ExpressionEvalResult::DoubleResult((value as f32).ln()),
+            ExpressionEvalResult::IntegerResult(value) => 
+                ExpressionEvalResult::DoubleResult((value as f32).ln()),            
             ExpressionEvalResult::DoubleResult(value) =>
-                ExpressionEvalResult::DoubleResult(value.ln()), 
+                ExpressionEvalResult::DoubleResult(value.ln()),
             _ => {panic!("incorrect type")}
         }
     }
     fn fill_structure_string(&self, buffer : &mut String) {        
         buffer.push_str("LOG(");
+        self.expr.fill_structure_string(buffer);
+        buffer.push(')')
+    }  
+}
+
+pub struct GwInt {
+    pub expr: Box<dyn GwExpression>
+}
+
+impl GwExpression for GwInt {
+    fn eval(&self, context: &mut EvaluationContext) -> ExpressionEvalResult {
+        match self.expr.eval(context) {
+            full@ExpressionEvalResult::IntegerResult(_) =>
+                full,
+            ExpressionEvalResult::DoubleResult(value) =>
+                ExpressionEvalResult::IntegerResult(value as i16), 
+            _ => {panic!("incorrect type")}
+        }
+    }
+    fn fill_structure_string(&self, buffer : &mut String) {        
+        buffer.push_str("INT(");
         self.expr.fill_structure_string(buffer);
         buffer.push(')')
     }  
@@ -610,25 +631,42 @@ impl GwInstruction for GwColor {
     }
 }
 
+pub enum PrintSeparator {
+    Comma,
+    Semicolon
+}
+
 pub struct GwPrintStat {
-    pub expressions : Vec<Option<Box<dyn GwExpression>>>
+    pub expressions : Vec<(Option<Box<dyn GwExpression>>, Option<PrintSeparator>)>
 }
 
 impl GwInstruction for GwPrintStat {
     fn eval (&self, _line: i16, context : &mut EvaluationContext) -> InstructionResult{
 
         let mut result = String::new();
+        let mut i = 0;
+        let mut newline_at_the_end = true;
         for print_expr in &self.expressions {
             match print_expr {
-                Some(expr) => {
+                (Some(expr), separator) => {
                     let evaluated_expr = expr.eval(context);
                     result.push_str(&evaluated_expr.to_string()[..]);
+                    if i == &self.expressions.len() - 1 {
+                        if let Some(PrintSeparator::Semicolon) = separator {
+                            newline_at_the_end = false;
+                        }
+                    }
                 },
                 _ => {}
             }
+            i += 1;
         }
 
-        println!("{}", result.to_string());
+        if newline_at_the_end {
+            println!("{}", result.to_string());
+        } else {
+            print!("{}", result.to_string());
+        }
         InstructionResult::EvaluateNext
     }
 
@@ -638,7 +676,7 @@ impl GwInstruction for GwPrintStat {
 //        let mut result = String::new();
         for print_expr in &self.expressions {
             match print_expr {
-                Some(expr) => {
+                (Some(expr), _) => {
                     expr.fill_structure_string(buffer);
                 },
                 _ => {}
