@@ -14,6 +14,11 @@ pub enum GwVariableType {
     String
 }
 
+pub enum LineExecutionArgument {
+    Empty,
+    NextIteration
+}
+
 pub struct ProgramLine {
     pub line : i16,
     pub instruction : Box<dyn GwInstruction>,
@@ -24,15 +29,21 @@ pub struct ProgramLine {
 pub enum InstructionResult {
     EvaluateNext,
     EvaluateLine(i16),
+    EvaluateLineWithArg(i16, LineExecutionArgument),
     EvaluateEnd,
     EvaluateToError(String)
 }
 
 pub trait GwInstruction {
-    fn eval (&self, line: i16, context : &mut EvaluationContext) -> InstructionResult;
-    fn fill_structure_string(&self,   buffer : &mut String);
+    fn eval (&self,
+             line: i16,
+             argument: LineExecutionArgument,
+             context : &mut EvaluationContext) -> InstructionResult;
+    fn fill_structure_string(&self, buffer : &mut String);
     fn is_wend(&self) -> bool { false }
-    fn is_while(&self) -> bool { false }     
+    fn is_while(&self) -> bool { false }
+    fn is_for(&self) -> bool { false }
+    fn is_next(&self) -> bool { false }
 }
 
 
@@ -274,13 +285,19 @@ impl GwProgram {
     
     pub fn eval(&self, context : &mut EvaluationContext) {
         let mut current_index = 0;
-        loop {
+        let mut arg = LineExecutionArgument::Empty;
+        loop {            
             let real_lines = &context.real_lines.as_ref().expect("real_lines calculated");
             if current_index >= real_lines.len() {      
                 break;
             }
 
-            let eval_result = real_lines[current_index].eval(current_index as i16, context);
+            let eval_result =
+                     real_lines[current_index].eval(
+                         current_index as i16,
+                         arg,
+                         context);
+            arg = LineExecutionArgument::Empty;
             match eval_result {
                 InstructionResult::EvaluateNext => {
                     current_index = current_index + 1;
@@ -288,6 +305,10 @@ impl GwProgram {
                 InstructionResult::EvaluateLine(new_line) => {
                     current_index = usize::try_from(new_line).unwrap();
                 }
+                InstructionResult::EvaluateLineWithArg(new_line, result_arg) => {
+                    arg = result_arg;
+                    current_index = usize::try_from(new_line).unwrap();
+                }                
                 InstructionResult::EvaluateEnd => {
                     break;
                 },

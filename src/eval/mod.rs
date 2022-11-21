@@ -1,6 +1,7 @@
 pub mod context;
 pub mod binary;
 pub mod while_instr;
+pub mod for_instr;
 
 //use std::fs::File;
 //use std::io::BufReader;
@@ -14,6 +15,7 @@ pub use crate::eval::context::{EvaluationContext,
 			       GwVariableType,
 			       GwInstruction,
 			       GwProgram,
+                               LineExecutionArgument,
 			       ProgramLine,
 			       InstructionResult};
 
@@ -333,7 +335,10 @@ pub struct GwListStat {
 }
 
 impl GwInstruction for GwListStat {
-    fn eval (&self, _line: i16, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self,
+             _line: i16,
+             _arg: LineExecutionArgument,
+             context : &mut EvaluationContext) -> InstructionResult{
         if let Some(up) =  &context.underlying_program {
             up.list();
         }
@@ -351,7 +356,10 @@ pub struct GwLoadStat {
 }
 
 impl GwInstruction for GwLoadStat {
-    fn eval (&self, _line: i16, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self,
+             _line: i16,
+             _arg: LineExecutionArgument,
+             context : &mut EvaluationContext) -> InstructionResult{
         let result = self.filename.eval(context);
         if let Some(up) =  &mut context.underlying_program {
             match result {
@@ -383,7 +391,10 @@ pub struct GwRunStat {
 }
 
 impl GwInstruction for GwRunStat {
-    fn eval (&self, _line: i16, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self,
+             _line: i16,
+             _arg: LineExecutionArgument,
+             context : &mut EvaluationContext) -> InstructionResult{
         if let Some(program) = &context.underlying_program {
             program.run();
         }
@@ -398,7 +409,10 @@ pub struct GwSystemStat {
 }
 
 impl GwInstruction for GwSystemStat {
-    fn eval (&self, _line: i16, _context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self,
+             _line: i16,
+             _arg: LineExecutionArgument,
+             _context : &mut EvaluationContext) -> InstructionResult{
         exit(0);
     }    
     fn fill_structure_string(&self, buffer : &mut String) {
@@ -423,7 +437,10 @@ impl GwDefDbl {
 }
 
 impl GwInstruction for GwDefDbl {
-    fn eval (&self, _line: i16, _context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self,
+             _line: i16,
+             _arg: LineExecutionArgument,
+             _context : &mut EvaluationContext) -> InstructionResult{
         // TODO implementation pending
         InstructionResult::EvaluateNext
     }
@@ -460,7 +477,10 @@ impl GwIf {
 }
 
 impl GwInstruction for GwIf {
-    fn eval (&self, _line: i16, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self,
+             _line: i16,
+             _arg: LineExecutionArgument,
+             context : &mut EvaluationContext) -> InstructionResult{
         match self.condition.eval(context) {
             ExpressionEvalResult::IntegerResult(i_result) if i_result == 0 => InstructionResult::EvaluateNext,
             ExpressionEvalResult::DoubleResult(d_result) if d_result == 0.0 => InstructionResult::EvaluateNext,
@@ -487,7 +507,10 @@ pub struct GwRem {
 }
 
 impl GwInstruction for GwRem {
-    fn eval (&self, _line: i16, _context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self,
+             _line: i16,
+             _arg: LineExecutionArgument,
+             _context : &mut EvaluationContext) -> InstructionResult{
         InstructionResult::EvaluateNext
     }
 
@@ -503,7 +526,10 @@ pub struct GwCls {
 }
 
 impl GwInstruction for GwCls {
-    fn eval (&self, _line: i16, _context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self,
+             _line: i16,
+             _arg: LineExecutionArgument,
+             _context : &mut EvaluationContext) -> InstructionResult{
         InstructionResult::EvaluateNext
     }
 
@@ -518,7 +544,10 @@ pub struct GwAssign {
 }
 
 impl GwInstruction for GwAssign {
-    fn eval (&self, _line: i16, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self,
+             _line: i16,
+             _arg: LineExecutionArgument,
+             context : &mut EvaluationContext) -> InstructionResult{
         let expression_evaluation = self.expression.eval(context);
         context.set_variable(&self.variable, &expression_evaluation);
         InstructionResult::EvaluateNext
@@ -540,7 +569,10 @@ pub struct GwArrayAssign {
 }
 
 impl GwInstruction for GwArrayAssign {
-    fn eval (&self, _line: i16, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self,
+             _line: i16,
+             _arg: LineExecutionArgument,
+             context : &mut EvaluationContext) -> InstructionResult{
         let mut evaluated_arguments = Vec::with_capacity(self.indices_expressions.len());
         for arg in &self.indices_expressions {
             let eval_index = arg.eval(context);
@@ -576,7 +608,10 @@ pub struct GwGotoStat {
 }
 
 impl GwInstruction for GwGotoStat {
-    fn eval (&self, _line: i16, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self,
+             _line: i16,
+             _arg: LineExecutionArgument,
+             context : &mut EvaluationContext) -> InstructionResult{
         if let Some(actual_line) =  context.get_real_line(self.line) {
             return InstructionResult::EvaluateLine(actual_line);
         } else {
@@ -599,7 +634,10 @@ pub struct GwKeyStat {
 }
 
 impl GwInstruction for GwKeyStat {
-    fn eval (&self, _line: i16, _context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self,
+             _line: i16,
+             _arg: LineExecutionArgument,
+             _context : &mut EvaluationContext) -> InstructionResult{
        InstructionResult::EvaluateNext
     }
     fn fill_structure_string(&self, buffer : &mut String) {
@@ -618,7 +656,10 @@ pub struct GwColor {
 }
 
 impl GwInstruction for GwColor {
-    fn eval (&self, _line: i16, _context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self,
+             _line: i16,
+             _arg: LineExecutionArgument,
+             _context : &mut EvaluationContext) -> InstructionResult{
         InstructionResult::EvaluateNext
     }
     fn fill_structure_string(&self, buffer : &mut String) {
@@ -641,7 +682,10 @@ pub struct GwPrintStat {
 }
 
 impl GwInstruction for GwPrintStat {
-    fn eval (&self, _line: i16, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self,
+             _line: i16,
+             _arg: LineExecutionArgument,
+             context : &mut EvaluationContext) -> InstructionResult{
 
         let mut result = String::new();
         let mut i = 0;
@@ -705,7 +749,10 @@ fn read_variable_from_input(variable: &Box<dyn GwAssignableExpression>,
 }
 
 impl GwInstruction for GwInputStat {
-    fn eval(&self, _line: i16, context : &mut EvaluationContext) -> InstructionResult {
+    fn eval(&self,
+            _line: i16,
+            _arg: LineExecutionArgument,
+            context : &mut EvaluationContext) -> InstructionResult {
         let mut buffer = String::new();
 	let mut pr = "?";
 	if let Some(ref prompt) = self.prompt {

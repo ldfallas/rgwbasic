@@ -231,6 +231,9 @@ impl GwTokenInfo {
         GwTokenInfo::add_token("USING", GwBasicToken::UsingTok, &mut dict, &mut dict2);
  	GwTokenInfo::add_token("WHILE", GwBasicToken::WhileTok, &mut dict, &mut dict2);
 	GwTokenInfo::add_token("WEND", GwBasicToken::WendTok, &mut dict, &mut dict2);
+ 	GwTokenInfo::add_token("FOR", GwBasicToken::ForTok, &mut dict, &mut dict2);
+	GwTokenInfo::add_token("NEXT", GwBasicToken::NextTok, &mut dict, &mut dict2);
+        GwTokenInfo::add_token("TO", GwBasicToken::ToTok, &mut dict, &mut dict2);
 	
 
         GwTokenInfo::add_token("*", GwBasicToken::TimesTok, &mut dict, &mut dict2);

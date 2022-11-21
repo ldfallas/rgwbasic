@@ -1,11 +1,16 @@
-use super::{GwExpression, GwInstruction, InstructionResult, EvaluationContext, ExpressionEvalResult};
+use super::{GwExpression, GwInstruction,
+            InstructionResult, EvaluationContext, ExpressionEvalResult,
+            LineExecutionArgument};
 
 pub struct GwWhile {
     pub condition : Box<dyn GwExpression>,
 }
 
 impl GwInstruction for GwWhile {
-    fn eval (&self, line: i16, context : &mut EvaluationContext) -> InstructionResult {
+    fn eval (&self,
+             line: i16,
+             _arg: LineExecutionArgument,
+             context : &mut EvaluationContext) -> InstructionResult {
         let mut wend_line : i16 = 0;
         
         // Find the cached corresponding line for this WHILE statement
@@ -45,7 +50,7 @@ impl GwInstruction for GwWhile {
     fn is_while(&self) -> bool { true }     
 }
 
-fn find_wend(line: i16, real_lines: &Vec<&Box<dyn GwInstruction>>) -> i16{
+fn find_wend(line: i16, real_lines: &Vec<&Box<dyn GwInstruction>>) -> i16 {
     let mut curr_line = line + 1;
     let mut while_end_balance = 0;
     loop {
@@ -73,7 +78,10 @@ pub struct GwWend {
 }
 
 impl GwInstruction for GwWend {
-    fn eval (&self, line: i16, context : &mut EvaluationContext) -> InstructionResult{
+    fn eval (&self,
+             line: i16,
+             _arg: LineExecutionArgument,
+             context : &mut EvaluationContext) -> InstructionResult{
         if let Some(corresponding_while) =  context.pair_instruction_table.get(&line) {             
             InstructionResult::EvaluateLine(*corresponding_while)
         } else {
@@ -101,7 +109,7 @@ mod while_eval_tests {
         ctxt.set_variable(
             &String::from("x"),
             &ExpressionEvalResult::IntegerResult(1));
-        let evaluation_result = w.eval(0, &mut ctxt);
+        let evaluation_result = w.eval(0, LineExecutionArgument::Empty, &mut ctxt);
 
         assert!(
             match evaluation_result {
@@ -129,7 +137,7 @@ mod while_eval_tests {
         ctxt.set_variable(
             &String::from("x"),
             &ExpressionEvalResult::IntegerResult(0));
-        let evaluation_result = abox.eval(0, &mut ctxt);
+        let evaluation_result = abox.eval(0, LineExecutionArgument::Empty, &mut ctxt);
 
         assert!(
             match evaluation_result {

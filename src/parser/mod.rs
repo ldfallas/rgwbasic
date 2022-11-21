@@ -27,6 +27,7 @@ use crate::eval::GwAssign;
 use crate::eval::GwArrayAssign;
 use crate::eval::GwCall;
 use crate::eval::while_instr::{GwWhile, GwWend};
+use crate::eval::for_instr::{GwFor, GwNext};
 use crate::eval::{GwLog, GwInt};
 use crate::eval::ProgramLine;
 use crate::eval::DefVarRange;
@@ -776,9 +777,9 @@ macro_rules! parse_seq {
 	$($tail:tt)*
     }, $action:block) => {
 	match $iterator.next() {
-	    Some($token_pattern) => {
-		parse_seq!($iterator, { $($tail)* },$action);
-	    }
+	    Some($token_pattern) => 
+		parse_seq!($iterator, { $($tail)* },$action),
+	    
 	    _ => {  return ParserResult::Error(String::from($error_message)); }
 	}
     };
@@ -835,6 +836,37 @@ fn parse_while_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
 	    );
 	}
     ]
+}
+
+fn parse_for_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
+                      -> ParserResult<Box<dyn GwInstruction>> {
+    parse_seq![
+        iterator,
+        {
+            token(GwToken::Identifier(variable), "Expecting identifier");
+            token(GwToken::Keyword(tokens::GwBasicToken::EqlTok), "Expecting equal (=)");
+            parse_success(from, parse_expression(iterator));
+            token(GwToken::Keyword(tokens::GwBasicToken::ToTok), "Expecting 'to'");
+            parse_success(to_expr, parse_expression(iterator));            
+        },
+        {
+            ParserResult::Success(
+                Box::new(
+                    GwFor {
+                        variable,
+                        from,
+                        to: to_expr,
+                        step: None
+                    }
+                ))
+        }
+
+    ]
+}
+
+fn parse_next_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
+		       -> ParserResult<Box<dyn GwInstruction>> {
+    return ParserResult::Success(Box::new(GwNext{ variable: None}));    
 }
 
 fn parse_wend_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
@@ -1216,7 +1248,9 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
             GwToken::Keyword(tokens::GwBasicToken::SystemTok)  => parse_system_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::InpTok)  => parse_input_stat(iterator),
 	    GwToken::Keyword(tokens::GwBasicToken::WhileTok) => parse_while_stat(iterator),
-	    GwToken::Keyword(tokens::GwBasicToken::WendTok) => parse_wend_stat(iterator),	    
+	    GwToken::Keyword(tokens::GwBasicToken::WendTok) => parse_wend_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::ForTok) => parse_for_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::NextTok) => parse_next_stat(iterator),
 	    
             GwToken::Identifier(var_name) => parse_assignment(iterator, var_name),
             _ => panic!("Not implemented parsing for non-assigment")
@@ -1297,7 +1331,8 @@ pub fn parse_instruction_line<'a>(iterator : &mut PushbackTokensIterator<'a>)
                                   -> ParserResult<ProgramLine> {
     if let Some(next_tok) = iterator.next() {
         if let GwToken::Integer(line_number) = next_tok {
-            if let ParserResult::Success(instr) = parse_instruction(iterator) {
+            let parse_result = parse_instruction(iterator);
+            if let ParserResult::Success(instr) = parse_result {
                 match parse_same_line_instruction_sequence(iterator) {
                  ParserResult::Success(rest_inst) => {
                     return ParserResult::Success(
@@ -1321,7 +1356,11 @@ pub fn parse_instruction_line<'a>(iterator : &mut PushbackTokensIterator<'a>)
                        ParserResult::Error(String::from(err))
                 }
             } else {
-                ParserResult::Error(String::from("Error parsing line"))
+                if let ParserResult::Error(msg) = parse_result {
+                    ParserResult::Error(msg)
+                } else {
+                    ParserResult::Error(String::from("Error parsing line"))
+                }
             }
         } else {
             ParserResult::Error(String::from("line number expected"))
