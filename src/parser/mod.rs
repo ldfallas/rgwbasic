@@ -16,6 +16,7 @@ use crate::eval::GwListStat;
 use crate::eval::GwRunStat;
 use crate::eval::GwSystemStat;
 use crate::eval::GwPrintStat;
+use crate::eval::print_using::GwPrintUsingStat;
 use crate::eval::GwLoadStat;
 use crate::eval::GwInputStat;
 use crate::eval::GwCls;
@@ -729,9 +730,10 @@ fn parse_system_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
 
 fn parse_print_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
                         -> ParserResult<Box<dyn GwInstruction>> {
+    let mut is_using = false;
     if let Some(tok) = iterator.next() {
         if let GwToken::Keyword(tokens::GwBasicToken::UsingTok) = tok {
-            // TODO process `USING` scenario
+            is_using = true;
         } else {
             iterator.push_back(tok);
         }
@@ -741,11 +743,19 @@ fn parse_print_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
         parse_with_flexible_separator(
             iterator,
             parse_expression) {
-        return ParserResult::Success(Box::new(
-            GwPrintStat {
-                expressions: exprs
-            }
-        ));
+            if is_using  {
+                return ParserResult::Success(Box::new(
+                    GwPrintUsingStat {
+                        expressions: exprs
+                    }
+                ));                
+            } else {
+                return ParserResult::Success(Box::new(
+                    GwPrintStat {
+                        expressions: exprs
+                    }
+                ));
+            }            
     } else {
         return ParserResult::Error(String::from("Expecting expression as PRINT argument"));
     }
