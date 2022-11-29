@@ -150,7 +150,7 @@ impl GwExpression for GwInt {
             full@ExpressionEvalResult::IntegerResult(_) =>
                 full,
             ExpressionEvalResult::DoubleResult(value) =>
-                ExpressionEvalResult::IntegerResult(value as i16), 
+                ExpressionEvalResult::DoubleResult(value.trunc()), 
             _ => {panic!("incorrect type")}
         }
     }
@@ -738,8 +738,9 @@ fn read_variable_from_input(variable: &Box<dyn GwAssignableExpression>,
 			    str_value: &str) {
     match variable.get_type(context) {
 	GwVariableType::Double => {
+            let dbl = str_value.trim_end().parse::<f32>().unwrap();
 	    variable.assign_value(
-		ExpressionEvalResult::DoubleResult(str_value.trim_end().parse::<f32>().unwrap()),
+		ExpressionEvalResult::DoubleResult(dbl),
 		context);
         } 
 	_ => panic!("Not implemented INPUT for this type")
