@@ -108,7 +108,7 @@ impl EvaluationContext<'_>  {
         }
     }
 
-    pub fn set_array_entry(&mut self, name : &String, indices : Vec<u16>, new_value : &ExpressionEvalResult) {
+    pub fn set_array_entry(&mut self, name : &str, indices : Vec<u16>, new_value : &ExpressionEvalResult) {
         if let Some(mut_array) = self.array_variables.get_mut(name) {
             mut_array.set_value(&indices, &new_value);
         } else {
@@ -116,12 +116,12 @@ impl EvaluationContext<'_>  {
         }
     }
 
-    pub fn declare_array(&mut self, name : String, size : u16) {
+    pub fn declare_array(&mut self, name : &str, size : u16) {
         let new_array = GwArray::new_one_dimension(size, GwVariableType::Double);
-        self.array_variables.insert(name, new_array);
+        self.array_variables.insert(String::from(name), new_array);
     }
 
-    pub fn get_existing_array(&self, name : &String, _size : usize) -> Option<&GwArray> {
+    pub fn get_existing_array(&self, name : &str) -> Option<&GwArray> {
         self.array_variables.get(name)
     }
 

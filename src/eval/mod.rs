@@ -3,6 +3,7 @@ pub mod binary;
 pub mod while_instr;
 pub mod for_instr;
 pub mod print_using;
+pub mod dim_instr;
 
 //use std::fs::File;
 //use std::io::BufReader;
@@ -44,7 +45,7 @@ pub struct GwParenthesizedAccessExpr {
 //             name,
 //             arguments
 //         }
-//     }    
+//     }
 // }
 
 fn try_to_get_integer_index(eval_result : &ExpressionEvalResult) -> Option<u16> {
@@ -62,10 +63,9 @@ impl GwExpression for GwParenthesizedAccessExpr {
             let eval_index = arg.eval(context);
             evaluated_arguments.push(try_to_get_integer_index(&eval_index).unwrap());
         }
-        
+
         if let Some(array) = context.get_existing_array(
-            &self.name,
-            self.arguments.len()) {
+            &self.name) {
             return array.get_value(evaluated_arguments);
         } else if let Some(_function) = context.get_existing_function(
             &self.name,
@@ -73,12 +73,12 @@ impl GwExpression for GwParenthesizedAccessExpr {
             panic!("Not implemented");
         } else {
             panic!("Cannot use parenthesis with identifier {}", self.name);
-        }        
+        }
     }
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&self.name[..]);
         buffer.push_str("(");
-        buffer.push_str(")");        
+        buffer.push_str(")");
     }
 
 }
@@ -92,17 +92,39 @@ impl GwAssignableExpression for GwCall {
     fn get_type(&self, context : &EvaluationContext) -> GwVariableType {
 	return context.get_variable_type(&self.array_or_function).unwrap();
     }
-    
+
     fn assign_value(&self,
-		    _value : ExpressionEvalResult,
-		    _context : &mut EvaluationContext) {
-	panic!("AHHHHH");
+		    value : ExpressionEvalResult,
+		    context : &mut EvaluationContext) {
+        let mut indices: Vec<u16> = vec![];
+        for expr in &self.arguments {
+            match expr.eval(context) {
+                ExpressionEvalResult::IntegerResult(index) if index > 0 => {
+                    indices.push(index as u16);
+                }
+                _ => { todo!(); }
+            }
+        }
+        context.set_array_entry(&self.array_or_function, indices, &value);
     }
 }
 
 impl GwExpression for GwCall {
-    fn eval (&self, _context : &mut EvaluationContext) -> ExpressionEvalResult {
-        panic!("Not implemented");
+    fn eval (&self, context : &mut EvaluationContext) -> ExpressionEvalResult {
+        let mut indices: Vec<u16> = vec![];
+        for expr in &self.arguments {
+            match expr.eval(context) {
+                ExpressionEvalResult::IntegerResult(index) if index > 0 => {
+                    indices.push(index as u16);
+                }
+                _ => { todo!(); }
+            }
+        }
+        if let Some(array) = context.get_existing_array(&self.array_or_function) {
+            array.get_value(indices)
+        } else {
+            todo!();
+        }
     }
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&self.array_or_function[..]);
@@ -115,8 +137,8 @@ impl GwExpression for GwCall {
             }
             i = i + 1
         }
-        buffer.push_str(")");        
-    }    
+        buffer.push_str(")");
+    }
 }
 
 pub struct GwLog {
@@ -126,18 +148,18 @@ pub struct GwLog {
 impl GwExpression for GwLog {
     fn eval(&self, context: &mut EvaluationContext) -> ExpressionEvalResult {
         match self.expr.eval(context) {
-            ExpressionEvalResult::IntegerResult(value) => 
-                ExpressionEvalResult::DoubleResult((value as f32).ln()),            
+            ExpressionEvalResult::IntegerResult(value) =>
+                ExpressionEvalResult::DoubleResult((value as f32).ln()),
             ExpressionEvalResult::DoubleResult(value) =>
                 ExpressionEvalResult::DoubleResult(value.ln()),
             _ => {panic!("incorrect type")}
         }
     }
-    fn fill_structure_string(&self, buffer : &mut String) {        
+    fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str("LOG(");
         self.expr.fill_structure_string(buffer);
         buffer.push(')')
-    }  
+    }
 }
 
 pub struct GwInt {
@@ -150,15 +172,15 @@ impl GwExpression for GwInt {
             full@ExpressionEvalResult::IntegerResult(_) =>
                 full,
             ExpressionEvalResult::DoubleResult(value) =>
-                ExpressionEvalResult::DoubleResult(value.trunc()), 
+                ExpressionEvalResult::DoubleResult(value.trunc()),
             _ => {panic!("incorrect type")}
         }
     }
-    fn fill_structure_string(&self, buffer : &mut String) {        
+    fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str("INT(");
         self.expr.fill_structure_string(buffer);
         buffer.push(')')
-    }  
+    }
 }
 
 
@@ -172,11 +194,11 @@ impl GwExpression for GwNegExpr {
             ExpressionEvalResult::IntegerResult(value) =>
                 ExpressionEvalResult::IntegerResult(-1 * value),
             ExpressionEvalResult::DoubleResult(value) =>
-                ExpressionEvalResult::DoubleResult(-1.0 * value),            
+                ExpressionEvalResult::DoubleResult(-1.0 * value),
             _ => {panic!("incorrect type")}
         }
     }
-    fn fill_structure_string(&self, buffer : &mut String) {        
+    fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str("-");
         self.expr.fill_structure_string(buffer);
     }
@@ -193,17 +215,17 @@ impl GwParenthesizedExpr {
         GwParenthesizedExpr {
             expr: expr
         }
-    }    
+    }
 }
 
 impl GwExpression for GwParenthesizedExpr {
     fn eval (&self, context : &mut EvaluationContext) -> ExpressionEvalResult {
         return self.expr.eval(context);
     }
-    fn fill_structure_string(&self, buffer : &mut String) {        
+    fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str("(");
         self.expr.fill_structure_string(buffer);
-        buffer.push_str(")");        
+        buffer.push_str(")");
     }
 }
 
@@ -213,7 +235,7 @@ pub struct GwStringLiteral {
 
 impl GwStringLiteral {
     pub fn with_value(value : String) -> GwStringLiteral {
-        GwStringLiteral { value } 
+        GwStringLiteral { value }
     }
 
 }
@@ -244,7 +266,7 @@ impl GwExpression for GwIntegerLiteral {
     }
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&self.value.to_string());
-    }    
+    }
 }
 
 pub struct GwDoubleLiteral {
@@ -263,7 +285,7 @@ impl GwExpression for GwDoubleLiteral {
     }
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&self.value.to_string());
-    }    
+    }
 }
 
 
@@ -276,7 +298,7 @@ impl GwAssignableExpression for GwVariableExpression {
     fn get_type(&self, context : &EvaluationContext) -> GwVariableType {
 	 context.get_variable_type(&self.name).unwrap_or(GwVariableType::Double)
     }
-    
+
     fn assign_value(&self, value : ExpressionEvalResult, context : &mut EvaluationContext) {
         context.set_variable(&self.name, &value);
     }
@@ -308,7 +330,7 @@ impl ProgramLine {
     fn get_line(&self) -> i16 {
         self.line
     }
-    
+
     // fn eval (&self, context : &mut EvaluationContext) -> InstructionResult {
     //      self.instruction.eval(self.line, context)
     // }
@@ -325,7 +347,7 @@ impl ProgramLine {
                 e.fill_structure_string(buffer);
             }
         }
-        buffer.push(')');        
+        buffer.push(')');
     }
 }
 
@@ -340,9 +362,9 @@ impl GwInstruction for GwListStat {
         if let Some(up) =  &context.underlying_program {
             up.list();
         }
-        
+
         InstructionResult::EvaluateNext
-    }    
+    }
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&"LIST");
     }
@@ -375,9 +397,9 @@ impl GwInstruction for GwLoadStat {
                 _ => {panic!("Type mismatch"); }
             }
 
-        }       
+        }
         InstructionResult::EvaluateNext
-    }    
+    }
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&"LOAD ");
         self.filename.fill_structure_string(buffer);
@@ -397,7 +419,7 @@ impl GwInstruction for GwRunStat {
             program.run();
         }
         InstructionResult::EvaluateNext
-    }    
+    }
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&"RUN");
     }
@@ -412,7 +434,7 @@ impl GwInstruction for GwSystemStat {
              _arg: LineExecutionArgument,
              _context : &mut EvaluationContext) -> InstructionResult{
         exit(0);
-    }    
+    }
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&"RUN");
     }
@@ -420,7 +442,7 @@ impl GwInstruction for GwSystemStat {
 
 pub enum DefVarRange {
     Single(char),
-    Range(char, char) 
+    Range(char, char)
 }
 
 pub struct GwDefDbl {
@@ -457,7 +479,7 @@ impl GwInstruction for GwDefDbl {
             }
             buffer.push_str(",");
         }
-    }    
+    }
 }
 
 pub struct GwIf {
@@ -489,7 +511,7 @@ impl GwInstruction for GwIf {
 		    panic!("Jumping to a non-existing line!");
 		}
 	    }
-        }        
+        }
     }
 
     fn fill_structure_string(&self, buffer : &mut String) {
@@ -520,7 +542,7 @@ impl GwInstruction for GwRem {
 
 
 pub struct GwCls {
-    
+
 }
 
 impl GwInstruction for GwCls {
@@ -555,7 +577,7 @@ impl GwInstruction for GwAssign {
         buffer.push_str(&self.variable[..]);
         buffer.push_str(&" = ");
         self.expression.fill_structure_string(buffer);
-    }    
+    }
 }
 
 //
@@ -594,7 +616,7 @@ impl GwInstruction for GwArrayAssign {
 
         buffer.push_str(&") = ");
         self.expression.fill_structure_string(buffer);
-    }    
+    }
 }
 
 
@@ -650,7 +672,7 @@ impl GwInstruction for GwKeyStat {
 pub struct GwColor {
     pub red : Box<dyn GwExpression>,
     pub green : Box<dyn GwExpression>,
-    pub blue : Box<dyn GwExpression>    
+    pub blue : Box<dyn GwExpression>
 }
 
 impl GwInstruction for GwColor {
@@ -742,7 +764,7 @@ fn read_variable_from_input(variable: &Box<dyn GwAssignableExpression>,
 	    variable.assign_value(
 		ExpressionEvalResult::DoubleResult(dbl),
 		context);
-        } 
+        }
 	_ => panic!("Not implemented INPUT for this type")
     }
 }
@@ -773,7 +795,7 @@ impl GwInstruction for GwInputStat {
         //             &self.variable,
         //             &ExpressionEvalResult::DoubleResult(buffer.trim_end().parse::<f32>().unwrap()));
         //     },
-        //     None => { 
+        //     None => {
         //         // Assume `double` for non-existing variable
         //         context.set_variable(
         //             &self.variable,
@@ -811,7 +833,7 @@ impl GwInstruction for GwInputStat {
 #[cfg(test)]
 mod eval_tests {
     use std::collections::HashMap;
-    
+
     // use crate::gwparser::GwAssign;
     // use crate::gwparser::GwIntegerLiteral;
     // use crate::gwparser::ProgramLine;
@@ -821,7 +843,7 @@ mod eval_tests {
     //    use crate::parser::*;
     use crate::eval::ExpressionEvalResult;
     use crate::eval::*;
-    
+
     #[test]
     fn it_tests_basic_eval() {
         let line1 = ProgramLine {
@@ -864,9 +886,10 @@ mod eval_tests {
         if let Some(ExpressionEvalResult::IntegerResult(value)) = context.lookup_variable(&String::from("X")) {
             let some_value : i16 = 10;
             assert_eq!(&some_value, value);
-        }        
+        }
     }
 
+   
     #[test]
     fn it_negates_integer_expressions() {
         let negation = GwNegExpr {
@@ -882,6 +905,22 @@ mod eval_tests {
     }
 
     #[test]
+    fn it_executes_array_access() -> Result<(), String>{
+        let array_access = GwCall {
+            array_or_function: "arr".to_string(),
+            arguments: vec![Box::new(GwIntegerLiteral::with_value(2))]
+        };
+        let mut context = empty_context();
+        context.declare_array("arr", 5);
+        context.set_array_entry("arr", vec![2 as u16], &ExpressionEvalResult::IntegerResult(101));
+
+        match array_access.eval(&mut context) {
+            ExpressionEvalResult::IntegerResult(101) => Ok(()),
+            _ => Err("Invalid array access result".to_string())
+        }
+    }
+
+    #[test]
     fn it_negates_double_expressions() {
         let negation = GwNegExpr {
             expr: Box::new(GwDoubleLiteral::with_value(2.5))
@@ -893,7 +932,7 @@ mod eval_tests {
             ExpressionEvalResult::DoubleResult(x) => assert_eq!(x, -2.5),
             _ => assert!(false)
         }
-    }    
+    }
 
     #[test]
     fn it_tests_basic_array_eval() {
@@ -916,10 +955,10 @@ mod eval_tests {
         let mut context = EvaluationContext::new();
 	context.real_lines = Some(vec![]);
 
-        context.declare_array(String::from("A"), 10);
+        context.declare_array("A", 10);
 
-        let arr1 = context.get_existing_array(&String::from("A"), 1);
-        
+        let arr1 = context.get_existing_array("A");
+
         if let ExpressionEvalResult::IntegerResult(value) = arr1.unwrap().get_value(vec![1]) {
             let some_value : i16 = 0;
             assert_eq!(some_value, value);
@@ -927,17 +966,17 @@ mod eval_tests {
 
         program.eval(&mut context);
 
-        let arr2 = context.get_existing_array(&String::from("A"), 1);
+        let arr2 = context.get_existing_array("A");
 
         if let ExpressionEvalResult::IntegerResult(value) = arr2.unwrap().get_value(vec![1]) {
             let some_value : i16 = 12;
             assert_eq!(some_value, value);
-        }        
+        }
     }
 
 
 
-    fn empty_context() -> EvaluationContext<'static> {
+    pub fn empty_context() -> EvaluationContext<'static> {
         EvaluationContext {
             variables: HashMap::new(),
             array_variables: HashMap::new(),
@@ -949,4 +988,3 @@ mod eval_tests {
     }
 
 }
-

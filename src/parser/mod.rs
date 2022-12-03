@@ -29,6 +29,7 @@ use crate::eval::GwArrayAssign;
 use crate::eval::GwCall;
 use crate::eval::while_instr::{GwWhile, GwWend};
 use crate::eval::for_instr::{GwFor, GwNext};
+use crate::eval::dim_instr::GwDim;
 use crate::eval::{GwLog, GwInt};
 use crate::eval::ProgramLine;
 use crate::eval::DefVarRange;
@@ -445,24 +446,22 @@ fn parse_restrict_identifier_expression(iterator : &mut PushbackTokensIterator)
     //    let tmp: Box<dyn GwAssignableExpression> = Box::new(GwVariableExpression::with_name(String::from("a")));
     //    let mut tmp = Box::new(GwVariableExpression::with_name(String::from("a")));
     let mut result = ParserResult::Nothing;
-    if let Some(next_token) = iterator.next() {
-        if let GwToken::Identifier(id) = next_token {
-
-            match parse_id_expression_aux::<Box<dyn GwAssignableExpression>>(iterator, id) {
-                IdExpressionResult::Var(variable) => {
-		    let tmp : Box<dyn GwAssignableExpression> =
-			Box::new(variable);
-		    result = ParserResult::Success(tmp);
-		}
-                IdExpressionResult::Arr(arr_access) =>{
-		    let tmp : Box<dyn GwAssignableExpression> =
-			Box::new(arr_access);
-		    result = ParserResult::Success(tmp);
-		},
-                IdExpressionResult::Builtin(_) => { result = ParserResult::Error(String::from("Cannot assign to builtin function")) },
-                IdExpressionResult::Error(err) => { result = err;}
-            }
+    if let Some(GwToken::Identifier(id)) = iterator.next() {
+        match parse_id_expression_aux::<Box<dyn GwAssignableExpression>>(iterator, id) {
+            IdExpressionResult::Var(variable) => {
+		let tmp : Box<dyn GwAssignableExpression> =
+		    Box::new(variable);
+		result = ParserResult::Success(tmp);
+	    }
+            IdExpressionResult::Arr(arr_access) =>{
+		let tmp : Box<dyn GwAssignableExpression> =
+		    Box::new(arr_access);
+		result = ParserResult::Success(tmp);
+	    },
+            IdExpressionResult::Builtin(_) => { result = ParserResult::Error(String::from("Cannot assign to builtin function")) },
+            IdExpressionResult::Error(err) => { result = err;}
         }
+        
     }
     result
 }
@@ -890,6 +889,30 @@ fn parse_while_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
     ]
 }
 
+
+fn parse_dim_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
+                      -> ParserResult<Box<dyn GwInstruction>> {
+    parse_seq![
+        iterator,
+        {
+            token(GwToken::Identifier(name), "Expecting declaration name");
+            token(GwToken::Keyword(tokens::GwBasicToken::LparTok), "Expecting left parenthesis");
+            parse_success(dimensions,
+                          parse_with_separator(iterator,
+				               parse_expression,
+					       tokens::GwBasicToken::CommaSeparatorTok));
+            token(GwToken::Keyword(tokens::GwBasicToken::RparTok), "Expecting right parenthesis");
+        },
+        {
+            ParserResult::Success(
+                Box::new(
+                    GwDim::new(name, dimensions)
+                )
+            )
+        }
+    ]
+}
+
 fn parse_for_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
                       -> ParserResult<Box<dyn GwInstruction>> {
     parse_seq![
@@ -934,7 +957,7 @@ fn parse_input_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
 	opt_token(GwToken::String(prompt_txt), prompt = prompt_txt);
 	opt_token(GwToken::Keyword(tokens::GwBasicToken::CommaSeparatorTok), _x = 1);
 	parse_success(input_vars, parse_with_separator(iterator,
-				     parse_restrict_identifier_expression,
+				                       parse_restrict_identifier_expression,
 						       tokens::GwBasicToken::CommaSeparatorTok));
 	},
 	{
@@ -1302,6 +1325,7 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
 	    GwToken::Keyword(tokens::GwBasicToken::WhileTok) => parse_while_stat(iterator),
 	    GwToken::Keyword(tokens::GwBasicToken::WendTok) => parse_wend_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::ForTok) => parse_for_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::DimTok) => parse_dim_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::NextTok) => parse_next_stat(iterator),
 
             GwToken::Identifier(var_name) => parse_assignment(iterator, var_name),
@@ -1587,6 +1611,26 @@ mod parser_tests {
         }
     }
 
+
+    #[test]
+    fn it_parses_dim() -> Result<(), String> {
+        let str = "10 Dim a(10, foo + 1)";
+        let pb = PushbackCharsIterator {
+            chars: str.chars(),
+            pushed_back: None
+        };
+        let mut tokens_iterator = PushbackTokensIterator::create(pb);
+        match parse_instruction_line(&mut tokens_iterator) {
+            ParserResult::Success(instr) => {
+                let mut buf = String::new();
+                instr.fill_structure_string(&mut buf);
+                assert_eq!(buf, String::from("(10 (DIM A(10,(FOO + 1)))"));
+		return Ok(());
+            }
+            ParserResult::Error(error) => { return Err(error); }
+	    ParserResult::Nothing => { return Err("Nothing".to_string()); }
+        }
+    }
 
     #[test]
     fn it_parses_mult_instruction_line() {
