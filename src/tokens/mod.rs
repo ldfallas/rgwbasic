@@ -9,8 +9,8 @@ use std::collections::HashMap;
 pub enum GwBasicToken {
     EndTok,
     ForTok,
-    NextTok, 
-    DataTok, 
+    NextTok,
+    DataTok,
     InputTok,
     DimTok,
     ReadTok,
@@ -204,7 +204,7 @@ pub enum GwBasicToken {
 
 pub struct GwTokenInfo {
     token_text : HashMap<String, GwBasicToken>,
-//    token_vs_text : HashMap<GwBasicToken, String>        
+//    token_vs_text : HashMap<GwBasicToken, String>
 }
 
 impl GwTokenInfo {
@@ -218,6 +218,9 @@ impl GwTokenInfo {
         GwTokenInfo::add_token("CLS", GwBasicToken::ClsTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("COLOR", GwBasicToken::ColorTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("DEFDBL", GwBasicToken::DefdblTok, &mut dict, &mut dict2);
+        GwTokenInfo::add_token("DEFINT", GwBasicToken::DefintTok, &mut dict, &mut dict2);
+        GwTokenInfo::add_token("DEFSTR", GwBasicToken::DefstrTok, &mut dict, &mut dict2);
+        GwTokenInfo::add_token("DEFSNG", GwBasicToken::DefsngTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("DIM", GwBasicToken::DimTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("END", GwBasicToken::EndTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("GOTO", GwBasicToken::GotoTok, &mut dict, &mut dict2);
@@ -235,14 +238,14 @@ impl GwTokenInfo {
         GwTokenInfo::add_token("THEN", GwBasicToken::ThenTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("TO", GwBasicToken::ToTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("USING", GwBasicToken::UsingTok, &mut dict, &mut dict2);
-	
+
 
         GwTokenInfo::add_token("*", GwBasicToken::TimesTok, &mut dict, &mut dict2);
-        GwTokenInfo::add_token("/", GwBasicToken::DivTok, &mut dict, &mut dict2);        
+        GwTokenInfo::add_token("/", GwBasicToken::DivTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("-", GwBasicToken::MinusTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("+", GwBasicToken::PlusTok, &mut dict, &mut dict2);
 	GwTokenInfo::add_token("<>", GwBasicToken::DifferentTok, &mut dict, &mut dict2);
-        
+
         GwTokenInfo {
             token_text: dict//,
 //            token_vs_text: dict2

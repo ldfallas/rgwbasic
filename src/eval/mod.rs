@@ -4,6 +4,7 @@ pub mod while_instr;
 pub mod for_instr;
 pub mod print_using;
 pub mod dim_instr;
+pub mod def_instr;
 
 //use std::fs::File;
 //use std::io::BufReader;
@@ -149,7 +150,7 @@ impl GwExpression for GwLog {
     fn eval(&self, context: &mut EvaluationContext) -> ExpressionEvalResult {
         match self.expr.eval(context) {
             ExpressionEvalResult::IntegerResult(value) =>
-                ExpressionEvalResult::DoubleResult((value as f32).ln()),
+                ExpressionEvalResult::DoubleResult((value as f64).ln()),
             ExpressionEvalResult::DoubleResult(value) =>
                 ExpressionEvalResult::DoubleResult(value.ln()),
             _ => {panic!("incorrect type")}
@@ -270,11 +271,11 @@ impl GwExpression for GwIntegerLiteral {
 }
 
 pub struct GwDoubleLiteral {
-    value : f32
+    value : f64
 }
 
 impl GwDoubleLiteral {
-    pub fn with_value(value : f32) -> GwDoubleLiteral {
+    pub fn with_value(value : f64) -> GwDoubleLiteral {
         GwDoubleLiteral { value }
     }
 }
@@ -437,48 +438,6 @@ impl GwInstruction for GwSystemStat {
     }
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&"RUN");
-    }
-}
-
-pub enum DefVarRange {
-    Single(char),
-    Range(char, char)
-}
-
-pub struct GwDefDbl {
-    ranges : Vec<DefVarRange>
-}
-
-impl GwDefDbl {
-    pub fn with_var_range(var_range : Vec<DefVarRange>)
-                          -> GwDefDbl {
-        GwDefDbl { ranges : var_range }
-    }
-}
-
-impl GwInstruction for GwDefDbl {
-    fn eval (&self,
-             _line: i16,
-             _arg: LineExecutionArgument,
-             _context : &mut EvaluationContext) -> InstructionResult{
-        // TODO implementation pending
-        InstructionResult::EvaluateNext
-    }
-
-    fn fill_structure_string(&self, buffer : &mut String) {
-        buffer.push_str(&"DEFDBL ");
-        for obj in &self.ranges {
-            match obj {
-                DefVarRange::Single(c) =>
-                    buffer.push_str(&c.to_string()[..]),
-                DefVarRange::Range(s, e) => {
-                    buffer.push_str(&s.to_string()[..]);
-                    buffer.push_str("-");
-                    buffer.push_str(&e.to_string()[..]);
-                }
-            }
-            buffer.push_str(",");
-        }
     }
 }
 
@@ -760,7 +719,7 @@ fn read_variable_from_input(variable: &Box<dyn GwAssignableExpression>,
 			    str_value: &str) {
     match variable.get_type(context) {
 	GwVariableType::Double => {
-            let dbl = str_value.trim_end().parse::<f32>().unwrap();
+            let dbl = str_value.trim_end().parse::<f64>().unwrap();
 	    variable.assign_value(
 		ExpressionEvalResult::DoubleResult(dbl),
 		context);

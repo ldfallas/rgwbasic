@@ -25,14 +25,18 @@ impl GwPrintUsingStat {
                 }
                 PrintUsingFormatFragment::Numeric { dollar, digits, comma, decimals, rest} => {
                     tmp_format = rest;
-                    let mut value_to_use = 0 as f32;
+                    let mut value_to_use = 0 as f64;
                     if let Some((Some(arg), _)) = self.expressions.get(arg_i) {
                         match arg.eval(context) {
                             ExpressionEvalResult::DoubleResult(dbl) => {
                                 value_to_use  = dbl;
                             }
+                            ExpressionEvalResult::SingleResult(dbl) => {
+                                value_to_use  = dbl as f64;
+                            }
+
                             ExpressionEvalResult::IntegerResult(ival) => {
-                                value_to_use  = ival as f32;
+                                value_to_use  = ival as f64;
                             }
                             _ => {
                                 return InstructionResult::EvaluateToError(String::from("Invalid value"))
@@ -89,7 +93,7 @@ impl GwInstruction for GwPrintUsingStat {
 }
 
 pub fn format_number(
-    value: f32,
+    value: f64,
     dollar: bool,
     digits:i8,
     comma: bool,
@@ -100,7 +104,7 @@ pub fn format_number(
     target.clear();
     if decimals > 0 {
         let tenspow = (10 as i32).pow(decimals as u32);
-        let mut start = (((value - value.trunc())  * (tenspow as f32)) as i32).abs();
+        let mut start = (((value - value.trunc())  * (tenspow as f64)) as i32).abs();
         let mut idec = decimals;
         while idec > 0 {
             let digit = (start % 10) as u32;
@@ -117,13 +121,17 @@ pub fn format_number(
     while idigits > 0 {
         if comma
             && i > 0
-            && i % 3 == 0 {
+            && i % 3 == 0
+            && tmp > 0 {
             target.push(',');
         }
         if tmp > 0 {
             let digit = tmp % 10;
             target.push(char::from_digit(digit as u32 , 10).unwrap());
             tmp /= 10;
+            if tmp == 0 &&  dollar {
+                target.push('$');
+            }
         } else {
             target.push(' ');
         }
@@ -134,9 +142,7 @@ pub fn format_number(
         target.push('-');
     }
 
-    if dollar {
-        target.push('$');
-    }
+
     // TODO there must be a better way without unsafe to do this:
     let new_result:String = target.chars().rev().collect();
     target.clear();
@@ -184,7 +190,7 @@ fn tok_numeric_format(input: &str) -> PrintUsingFormatFragment {
 pub fn tok_format_string<'a>(input: &'a str) -> PrintUsingFormatFragment<'a> {
     let mut i = 0;
     for c in input.chars() {
-        if c == '#'  {
+        if c == '#' || c == '$'  {
             if i > 0 {
                 return PrintUsingFormatFragment::Literal(&input[0..i], &input[i..])
             } else {
@@ -237,6 +243,27 @@ mod print_using_tests {
         }
     }
 
+    #[test]
+    fn it_tokenize_only_format_string_with_currency() -> Result<(), & 'static str> {
+        let mut result = tok_format_string("$$###,###,###.##");
+        if let PrintUsingFormatFragment::Numeric {
+                dollar:true,
+                digits: 9,
+                comma: true,
+                decimals: 2,
+                rest
+            } = result {
+            assert_eq!("", rest);
+            result = tok_format_string(rest);
+            if let PrintUsingFormatFragment::End(last) = result {
+                Ok(())
+            } else {
+                Err("Format not recognized")
+            }
+        } else {
+            Err("Format not recognized")
+        }
+    }   
 
     #[test]
     fn it_process_string_with_single_number_format() {
@@ -262,7 +289,7 @@ mod print_using_tests {
     }
 
     #[test]
-    fn it_process_string_with_numeric_at_start() {
+    fn it_process_string_with_numeric_at_start() -> Result<(), & 'static str> {
         let result = tok_format_string("####.#### %");
         if let PrintUsingFormatFragment::Numeric{
                 dollar:false,
@@ -272,8 +299,9 @@ mod print_using_tests {
                 rest
             } = result {
             assert_eq!(" %", rest);
+            Ok(())
         } else {
-            assert!(false);
+            Err("Format not recognized")
         }
     }
 
@@ -299,6 +327,18 @@ mod print_using_tests {
                       2,
                       &mut the_string);
         assert_eq!("-482.24", the_string);
+    }
+
+    #[test]
+    fn it_formats_with_currency() {
+        let mut the_string = String::new();
+        format_number(27749.479,
+                      true,
+                      9,
+                      true,
+                      2,
+                      &mut the_string);
+        assert_eq!("    $27,749.47", the_string);
     }
 
     #[test]

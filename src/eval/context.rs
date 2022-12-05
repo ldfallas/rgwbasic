@@ -51,15 +51,21 @@ pub trait GwInstruction {
 pub enum ExpressionEvalResult {
     StringResult(String),
     IntegerResult(i16),
-    DoubleResult(f32)
+    SingleResult(f32),
+    DoubleResult(f64)
 }
+
+pub enum ExpressionType {
+    String, Integer, Single, Double
+}
+
 
 fn get_default_value_for_type(var_type : &GwVariableType) -> ExpressionEvalResult {
     match var_type {
         GwVariableType::String => ExpressionEvalResult::StringResult(String::from("")),
         GwVariableType::Integer => ExpressionEvalResult::IntegerResult(0),
         GwVariableType::Double => ExpressionEvalResult::DoubleResult(0.0)
-    }       
+    }
 }
 
 
@@ -68,8 +74,9 @@ impl ExpressionEvalResult {
         match self {
             ExpressionEvalResult::StringResult(some_string) => some_string.clone(),
             ExpressionEvalResult::IntegerResult(iresult) => String::from(iresult.to_string()),
+            ExpressionEvalResult::SingleResult(dresult) => String::from(dresult.to_string()),
             ExpressionEvalResult::DoubleResult(dresult) => String::from(dresult.to_string())
-            
+
         }
     }
 }
@@ -78,7 +85,7 @@ pub struct EvaluationContext<'a> {
     pub variables: HashMap<String, ExpressionEvalResult>,
     pub array_variables: HashMap<String, GwArray>,
     pub jump_table: HashMap<i16, i16>,
-    pub underlying_program: Option<&'a mut GwProgram>,   
+    pub underlying_program: Option<&'a mut GwProgram>,
     pub pair_instruction_table: HashMap<i16, i16>,
     pub real_lines: Option<Vec<& 'a Box<dyn GwInstruction>>>,
 //    pub built_in_functions: HashMap<String, GwFunction>
@@ -95,7 +102,7 @@ impl EvaluationContext<'_>  {
             underlying_program: None,
             pair_instruction_table: HashMap::new(),
             real_lines: None
-        }        
+        }
     }
     pub fn with_program(program : &mut GwProgram) -> EvaluationContext {
         EvaluationContext {
@@ -136,14 +143,27 @@ impl EvaluationContext<'_>  {
         } else {
             None
         }
-    }   
-    
+    }
+
     pub fn lookup_variable(&self, name : &String) -> Option<&ExpressionEvalResult> {
         self.variables.get(name)
     }
-    
-    pub fn set_variable(&mut self, name : &String, value : &ExpressionEvalResult) {
-        self.variables.insert(name.clone(), value.clone());
+
+    pub fn set_variable(&mut self, name : &str, value : &ExpressionEvalResult) -> Result<(), & 'static str> {
+        if let Some(entry) = self.variables.get_mut(name) {
+            if matches_type(entry, &value) {
+                *entry = value.clone();
+                Ok(())
+            } else if let Some(new_value) = coerce_value_type(&value, entry) {
+                *entry = new_value;
+                Ok(())
+            } else {
+                Err("Type mismatch")
+            }
+        } else {
+            self.variables.insert(name.to_string(), value.clone());
+            Ok(())
+        }
     }
 
     pub fn get_variable_type(&self, name : &String) -> Option<GwVariableType> {
@@ -154,7 +174,72 @@ impl EvaluationContext<'_>  {
             _ => None
         }
     }
+
+    pub fn set_variable_type(&mut self, name: &str, var_type: &ExpressionType) {
+        match var_type {
+            ExpressionType::String => {
+                self.variables.insert(
+                    name.to_string(),
+                    ExpressionEvalResult::StringResult("".to_string()));
+            }
+            ExpressionType::Integer => {
+                self.variables.insert(
+                    name.to_string(),
+                    ExpressionEvalResult::IntegerResult(0));
+            }
+            ExpressionType::Single => {
+                self.variables.insert(
+                    name.to_string(),
+                    ExpressionEvalResult::SingleResult(0 as f32));
+            }
+            ExpressionType::Double => {
+                self.variables.insert(
+                    name.to_string(),
+                    ExpressionEvalResult::DoubleResult(0 as f64));
+            }
+        }
+    }
+
 }
+
+fn matches_type(entry: &ExpressionEvalResult, value: &ExpressionEvalResult) -> bool {
+    match (entry, value) {
+        (ExpressionEvalResult::IntegerResult(_), ExpressionEvalResult::IntegerResult(_)) => true,
+        (ExpressionEvalResult::StringResult(_), ExpressionEvalResult::StringResult(_)) => true,
+        (ExpressionEvalResult::SingleResult(_), ExpressionEvalResult::SingleResult(_)) => true,
+        (ExpressionEvalResult::DoubleResult(_), ExpressionEvalResult::DoubleResult(_)) => true,
+        _ => false
+    }
+}
+
+fn coerce_value_type(from: &ExpressionEvalResult, to: &ExpressionEvalResult)
+                     ->  Option<ExpressionEvalResult> {
+    match (from, to) {
+        // From int
+        (ExpressionEvalResult::IntegerResult(int_value),
+         ExpressionEvalResult::DoubleResult(_)) =>
+            Some(ExpressionEvalResult::DoubleResult(*int_value as f64)),
+        (ExpressionEvalResult::IntegerResult(int_value),
+         ExpressionEvalResult::SingleResult(_)) =>
+            Some(ExpressionEvalResult::SingleResult(*int_value as f32)),
+        // from double
+        (ExpressionEvalResult::DoubleResult(dbl_value),
+         ExpressionEvalResult::SingleResult(_)) =>
+            Some(ExpressionEvalResult::SingleResult(*dbl_value as f32)),
+        (ExpressionEvalResult::DoubleResult(dbl_value),
+         ExpressionEvalResult::IntegerResult(_)) =>
+            Some(ExpressionEvalResult::IntegerResult(*dbl_value as i16)),
+        // from single
+        (ExpressionEvalResult::SingleResult(sgn_value),
+         ExpressionEvalResult::DoubleResult(_)) =>
+            Some(ExpressionEvalResult::DoubleResult(*sgn_value as f64)),
+        (ExpressionEvalResult::SingleResult(sng_value),
+         ExpressionEvalResult::IntegerResult(_)) =>
+            Some(ExpressionEvalResult::IntegerResult(*sng_value as i16)),
+        _ => None
+    }
+}
+
 
 
 pub struct GwArray {
@@ -220,7 +305,7 @@ impl GwProgram {
             match parse_instruction_line_from_string(uline) {
                 ParserResult::Success(parsed_line) => self.add_line(parsed_line),
                 ParserResult::Error(error) => {println!("Line {} Error: {}", line_number, error); break;},
-                ParserResult::Nothing=> println!("Nothing")       
+                ParserResult::Nothing=> println!("Nothing")
             }
             line_number = line_number + 1;
         }
@@ -252,7 +337,7 @@ impl GwProgram {
             real_lines: Some(vec![])
         };
         //      for j in 1..self.lines.len() {
-        
+
         {
             let real_lines = &mut context.real_lines.as_mut().expect("the vec");
             for e in self.lines.iter() {
@@ -261,15 +346,15 @@ impl GwProgram {
                     for nested in rest {
                         real_lines.push(&nested);
                     }
-                }           
+                }
             }
         }
-        
+
         self.eval(&mut context);
     }
-    
+
     pub fn add_line(&mut self, new_line : ProgramLine) {
-        let mut i = 0;        
+        let mut i = 0;
         while i < self.lines.len() {
             if new_line.get_line() == self.lines[i].get_line() {
                 self.lines[i] = new_line;
@@ -282,13 +367,13 @@ impl GwProgram {
         }
         self.lines.push(new_line);
     }
-    
+
     pub fn eval(&self, context : &mut EvaluationContext) {
         let mut current_index = 0;
         let mut arg = LineExecutionArgument::Empty;
-        loop {            
+        loop {
             let real_lines = &context.real_lines.as_ref().expect("real_lines calculated");
-            if current_index >= real_lines.len() {      
+            if current_index >= real_lines.len() {
                 break;
             }
 
@@ -308,7 +393,7 @@ impl GwProgram {
                 InstructionResult::EvaluateLineWithArg(new_line, result_arg) => {
                     arg = result_arg;
                     current_index = usize::try_from(new_line).unwrap();
-                }                
+                }
                 InstructionResult::EvaluateEnd => {
                     break;
                 },
@@ -316,7 +401,7 @@ impl GwProgram {
                     println!("RUNTIME ERROR: {}", error_message);
                     break;
                 }
-            }            
+            }
         }
     }
 }

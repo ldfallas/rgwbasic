@@ -26,7 +26,7 @@ pub enum GwBinaryOperationKind {
 
 trait BinaryOperationEvaluator {
     fn perform_int_operation(&self, left : i16, right : i16) -> i16;
-    fn perform_double_operation(&self, left : f32, right : f32) -> f32;
+    fn perform_double_operation(&self, left : f64, right : f64) -> f64;
 
     fn evaluate(&self,
                 left_result : &ExpressionEvalResult,
@@ -37,10 +37,10 @@ trait BinaryOperationEvaluator {
                 ExpressionEvalResult::IntegerResult(self.perform_int_operation(*left, *right)),
             (ExpressionEvalResult::DoubleResult(left),
              ExpressionEvalResult::IntegerResult(right)) =>
-                ExpressionEvalResult::DoubleResult(self.perform_double_operation(*left, f32::from(*right))),
+                ExpressionEvalResult::DoubleResult(self.perform_double_operation(*left, f64::from(*right))),
             (ExpressionEvalResult::IntegerResult(left),
              ExpressionEvalResult::DoubleResult(right)) =>
-                ExpressionEvalResult::DoubleResult(self.perform_double_operation(f32::from(*left), *right)),
+                ExpressionEvalResult::DoubleResult(self.perform_double_operation(f64::from(*left), *right)),
             (ExpressionEvalResult::DoubleResult(left),
              ExpressionEvalResult::DoubleResult(right)) =>
                 ExpressionEvalResult::DoubleResult(self.perform_double_operation(*left, *right)),
@@ -57,7 +57,7 @@ impl BinaryOperationEvaluator for PlusEvaluator {
         left + right
     }
 
-    fn perform_double_operation(&self, left : f32, right : f32) -> f32 {
+    fn perform_double_operation(&self, left : f64, right : f64) -> f64 {
         left + right
     }
 }
@@ -70,7 +70,7 @@ impl BinaryOperationEvaluator for MinusEvaluator {
         left - right
     }
 
-    fn perform_double_operation(&self, left : f32, right : f32) -> f32 {
+    fn perform_double_operation(&self, left : f64, right : f64) -> f64 {
         left - right
     }
 }
@@ -87,7 +87,7 @@ impl BinaryOperationEvaluator for EqualEvaluator {
         }
     }
 
-    fn perform_double_operation(&self, left : f32, right : f32) -> f32 {
+    fn perform_double_operation(&self, left : f64, right : f64) -> f64 {
         if left == right {
             -1.0
         } else {
@@ -109,7 +109,7 @@ impl BinaryOperationEvaluator for DifferentEvaluator {
         }
     }
 
-    fn perform_double_operation(&self, left : f32, right : f32) -> f32 {
+    fn perform_double_operation(&self, left : f64, right : f64) -> f64 {
         if left != right {
             -1.0
         } else {
@@ -127,7 +127,7 @@ impl BinaryOperationEvaluator for TimesEvaluator {
         left * right
     }
 
-    fn perform_double_operation(&self, left : f32, right : f32) -> f32 {
+    fn perform_double_operation(&self, left : f64, right : f64) -> f64 {
         left * right
     }
 }
@@ -145,15 +145,16 @@ impl BinaryOperationEvaluator for PowEvaluator {
         result
     }
 
-    fn perform_double_operation(&self, left : f32, right : f32) -> f32 {
+    fn perform_double_operation(&self, left : f64, right : f64) -> f64 {
         left.powf(right)
     }
 }
 
-fn get_double_value(value : &ExpressionEvalResult) -> Option<f32> {
+fn get_double_value(value : &ExpressionEvalResult) -> Option<f64> {
     match value {
         ExpressionEvalResult::DoubleResult(val) => Some(*val),
-        ExpressionEvalResult::IntegerResult(int_value) => Some(f32::from(*int_value)),
+        ExpressionEvalResult::IntegerResult(int_value) => Some(f64::from(*int_value)),
+        &ExpressionEvalResult::SingleResult(int_value) => Some(int_value as f64),
         _ => None
     }
 }
@@ -166,7 +167,7 @@ impl BinaryOperationEvaluator for DivEvaluator {
         left / right
     }
 
-    fn perform_double_operation(&self, left : f32, right : f32) -> f32 {
+    fn perform_double_operation(&self, left : f64, right : f64) -> f64 {
         left / right
     }
 
