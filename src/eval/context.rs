@@ -81,6 +81,60 @@ impl ExpressionEvalResult {
     }
 }
 
+
+pub trait Console {
+    fn print(&mut self, value: &str);
+    fn print_line(&mut self, value: &str);
+    fn read_line(&mut self, buffer: &mut String);
+    fn clear_screen(&mut self);
+    fn current_text_column(&self) -> usize;
+    fn adjust_to_position(&mut self, position: usize) {
+        let mut num_spaces = 0;
+        let cur_column = self.current_text_column();
+        if cur_column <= position {
+            num_spaces = position - cur_column;
+        } else {
+            num_spaces = position;
+            self.print_line("")
+        }
+       for _ in 1..num_spaces {
+            self.print(" ");
+        }            
+    }
+}
+
+pub struct DefaultConsole {
+    column_position: usize
+}
+
+impl DefaultConsole {
+    pub fn new() -> DefaultConsole {
+        DefaultConsole {  column_position: 0 }
+    }    
+}
+
+impl Console for DefaultConsole {
+    fn print(&mut self, value: &str) {
+        print!("{}", value);
+        self.column_position += value.len();
+    }
+    
+    fn print_line(&mut self, value: &str) {
+        println!("{}", value);
+        self.column_position = 0;
+    }
+    fn read_line(&mut self, _buffer: &mut String) {
+        todo!();
+    }
+    fn clear_screen(&mut self) {
+        todo!();
+    }
+    fn current_text_column(&self) -> usize{
+        self.column_position + 1
+    }
+}
+
+
 pub struct EvaluationContext<'a> {
     pub variables: HashMap<String, ExpressionEvalResult>,
     pub array_variables: HashMap<String, GwArray>,
@@ -88,6 +142,7 @@ pub struct EvaluationContext<'a> {
     pub underlying_program: Option<&'a mut GwProgram>,
     pub pair_instruction_table: HashMap<i16, i16>,
     pub real_lines: Option<Vec<& 'a Box<dyn GwInstruction>>>,
+    pub console: Box<dyn Console>
 //    pub built_in_functions: HashMap<String, GwFunction>
 }
 
@@ -101,7 +156,8 @@ impl EvaluationContext<'_>  {
             array_variables: HashMap::new(),
             underlying_program: None,
             pair_instruction_table: HashMap::new(),
-            real_lines: None
+            real_lines: None,
+            console: Box::new( DefaultConsole::new())
         }
     }
     pub fn with_program(program : &mut GwProgram) -> EvaluationContext {
@@ -111,7 +167,8 @@ impl EvaluationContext<'_>  {
             array_variables: HashMap::new(),
             underlying_program: Some(program),
             pair_instruction_table: HashMap::new(),
-            real_lines: None
+            real_lines: None,
+            console: Box::new(DefaultConsole::new())
         }
     }
 
@@ -321,34 +378,46 @@ impl GwProgram {
     }
 
     pub fn run(&self) {
+
+        let  real_lines = &mut vec![];
         let mut table = HashMap::new();
         let mut i = 0;
 
         for e in self.lines.iter() {
             table.insert(e.get_line(), i);
-            i = i + 1;
-        }
+            real_lines.push(&e.instruction);
+            i += 1;
+                if let Some(ref rest) = e.rest_instructions {
+                    for nested in rest {
+                        real_lines.push(&nested);
+                        i += 1;
+                    }
+                }
+            }
+
+        
         let mut context = EvaluationContext {
             array_variables: HashMap::new(),
             variables: HashMap::new(),
             jump_table: table,
             underlying_program: None,
             pair_instruction_table: HashMap::new(),
-            real_lines: Some(vec![])
+            real_lines: Some(real_lines.to_vec()),
+            console: Box::new(DefaultConsole::new())
         };
         //      for j in 1..self.lines.len() {
 
-        {
-            let real_lines = &mut context.real_lines.as_mut().expect("the vec");
-            for e in self.lines.iter() {
-                real_lines.push(&e.instruction);
-                if let Some(ref rest) = e.rest_instructions {
-                    for nested in rest {
-                        real_lines.push(&nested);
-                    }
-                }
-            }
-        }
+        // {
+        //     let real_lines = &mut context.real_lines.as_mut().expect("the vec");
+        //     for e in self.lines.iter() {
+        //         real_lines.push(&e.instruction);
+        //         if let Some(ref rest) = e.rest_instructions {
+        //             for nested in rest {
+        //                 real_lines.push(&nested);
+        //             }
+        //         }
+        //     }
+        // }
 
         self.eval(&mut context);
     }

@@ -14,7 +14,7 @@ impl GwInstruction for GwFor {
              line: i16,
              arg: LineExecutionArgument,
              context: &mut EvaluationContext) -> InstructionResult {
-        let mut next_line : i16 = 0;        
+        let mut next_line : i16 = 0;
         if let Some(corresponding_next) = context.pair_instruction_table.get(&line) {
             next_line = *corresponding_next;
         } else if let Some(ref real_lines) = context.real_lines {
@@ -27,12 +27,12 @@ impl GwInstruction for GwFor {
             }
             next_line = index_of_next;
         }
-        
+
         if let LineExecutionArgument::NextIteration = arg {
-            if let Some(ExpressionEvalResult::IntegerResult(val)) = context.lookup_variable(&self.variable) {
-                let n_value = *val;
+            let variable_value = context.lookup_variable(&self.variable);
+            if let Some(n_value) = get_as_integer(&variable_value) {
                 let to_value = self.to.eval(context);
-                if let ExpressionEvalResult::IntegerResult(to_i_value) = to_value {
+                if let Some(to_i_value) = get_as_integer(&Some(&to_value)) {
                     if to_i_value <= n_value {
                         InstructionResult::EvaluateLine(next_line + 1)
                     } else {
@@ -48,7 +48,7 @@ impl GwInstruction for GwFor {
             } else{
                 todo!();
             }
-            
+
         } else {
             let result = self.from.eval(context);
             context.set_variable(&self.variable, &result);
@@ -108,13 +108,22 @@ impl GwInstruction for GwNext {
                 LineExecutionArgument::NextIteration)
         } else {
             InstructionResult::EvaluateToError(String::from("NEXT WITHOUT FOR"))
-        }        
+        }
     }
 
     fn is_next(&self) -> bool { true }
 
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&"NEXT");
+    }
+}
+
+fn get_as_integer(value: &Option<&ExpressionEvalResult>) -> Option<i16> {
+    match value {
+        Some(ExpressionEvalResult::IntegerResult(int_value)) =>  Some(*int_value),
+        Some(ExpressionEvalResult::SingleResult(single_value)) => Some(*single_value as i16),
+        Some(ExpressionEvalResult::DoubleResult(double_value)) =>  Some(*double_value as i16),
+        _ => None
     }
 }
 
@@ -135,7 +144,7 @@ mod for_eval_tests {
 
         let abox:Box<dyn context::GwInstruction> = Box::new(instr );
         let inext :Box<dyn context::GwInstruction> = Box::new(GwNext{ variable: None});
-        
+
         ctxt.real_lines = Some(vec![
             &abox,
             &inext
@@ -152,7 +161,7 @@ mod for_eval_tests {
 
         evaluation_result = inext.eval(1,tmp_arg, &mut ctxt);
 
-        tmp_arg = LineExecutionArgument::Empty;        
+        tmp_arg = LineExecutionArgument::Empty;
         assert!(
             match evaluation_result {
                 InstructionResult::EvaluateLineWithArg(0, tmp_arg2) => {
@@ -164,7 +173,7 @@ mod for_eval_tests {
 
         evaluation_result = abox.eval(1,tmp_arg, &mut ctxt);
 
-        tmp_arg = LineExecutionArgument::Empty;        
+        tmp_arg = LineExecutionArgument::Empty;
         assert!(
             match evaluation_result {
                 InstructionResult::EvaluateNext => true,
@@ -173,7 +182,7 @@ mod for_eval_tests {
 
         evaluation_result = inext.eval(1,tmp_arg, &mut ctxt);
 
-        tmp_arg = LineExecutionArgument::Empty;        
+        tmp_arg = LineExecutionArgument::Empty;
         assert!(
             match evaluation_result {
                 InstructionResult::EvaluateLineWithArg(0, tmp_arg2) => {
@@ -185,7 +194,7 @@ mod for_eval_tests {
 
         // evaluation_result = abox.eval(0,tmp_arg, &mut ctxt);
 
-        // tmp_arg = LineExecutionArgument::Empty;        
+        // tmp_arg = LineExecutionArgument::Empty;
         // assert!(
         //     match evaluation_result {
         //         InstructionResult::EvaluateNext =>  true,
@@ -194,7 +203,7 @@ mod for_eval_tests {
 
 
         // evaluation_result = inext.eval(1,tmp_arg, &mut ctxt);
-        // tmp_arg = LineExecutionArgument::Empty;                
+        // tmp_arg = LineExecutionArgument::Empty;
         // assert!(
         //     match evaluation_result {
         //         InstructionResult::EvaluateLineWithArg(0, tmp_arg2) => {
@@ -202,11 +211,11 @@ mod for_eval_tests {
         //             true
         //         },
         //         _ => false
-        //     });        
+        //     });
 
         evaluation_result = abox.eval(0,tmp_arg, &mut ctxt);
 
-        tmp_arg = LineExecutionArgument::Empty;        
+        tmp_arg = LineExecutionArgument::Empty;
         assert!(
             match evaluation_result {
                 InstructionResult::EvaluateNext =>  true,
@@ -214,7 +223,7 @@ mod for_eval_tests {
             });
 
         evaluation_result = inext.eval(1,tmp_arg, &mut ctxt);
-        tmp_arg = LineExecutionArgument::Empty;                
+        tmp_arg = LineExecutionArgument::Empty;
         assert!(
             match evaluation_result {
                 InstructionResult::EvaluateLineWithArg(0, tmp_arg2) => {
@@ -222,7 +231,7 @@ mod for_eval_tests {
                     true
                 },
                 _ => false
-            });        
+            });
 
 
         evaluation_result = abox.eval(0,tmp_arg, &mut ctxt);
@@ -232,7 +241,7 @@ mod for_eval_tests {
                 InstructionResult::EvaluateLine(2) =>  true,
                 _ => false
             });
-        
-        
+
+
     }
 }

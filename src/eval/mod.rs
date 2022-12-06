@@ -142,6 +142,30 @@ impl GwExpression for GwCall {
     }
 }
 
+
+pub struct GwAbs {
+    pub expr: Box<dyn GwExpression>
+}
+
+impl GwExpression for GwAbs {
+    fn eval(&self, context: &mut EvaluationContext) -> ExpressionEvalResult {
+        match self.expr.eval(context) {
+            ExpressionEvalResult::IntegerResult(value) =>
+                ExpressionEvalResult::IntegerResult(value.abs()),
+            ExpressionEvalResult::SingleResult(value) =>
+                ExpressionEvalResult::SingleResult(value.abs()),
+            ExpressionEvalResult::DoubleResult(value) =>
+                ExpressionEvalResult::DoubleResult(value.abs()),
+            _ => {panic!("incorrect type")}
+        }
+    }
+    fn fill_structure_string(&self, buffer : &mut String) {
+        buffer.push_str("ABS(");
+        self.expr.fill_structure_string(buffer);
+        buffer.push(')')
+    }
+}
+
 pub struct GwLog {
     pub expr: Box<dyn GwExpression>
 }
@@ -238,7 +262,6 @@ impl GwStringLiteral {
     pub fn with_value(value : String) -> GwStringLiteral {
         GwStringLiteral { value }
     }
-
 }
 
 impl GwExpression for GwStringLiteral {
@@ -656,8 +679,14 @@ pub enum PrintSeparator {
     Semicolon
 }
 
+pub enum PrintElementWrapper {
+    Nothing,
+    Expr(Box<dyn GwExpression>),
+    Tab(Box<dyn GwExpression>)
+}
+
 pub struct GwPrintStat {
-    pub expressions : Vec<(Option<Box<dyn GwExpression>>, Option<PrintSeparator>)>
+    pub expressions : Vec<(PrintElementWrapper, Option<PrintSeparator>)>
 }
 
 impl GwInstruction for GwPrintStat {
@@ -671,24 +700,34 @@ impl GwInstruction for GwPrintStat {
         let mut newline_at_the_end = true;
         for print_expr in &self.expressions {
             match print_expr {
-                (Some(expr), separator) => {
+                (PrintElementWrapper::Expr(expr), separator) => {
                     let evaluated_expr = expr.eval(context);
-                    result.push_str(&evaluated_expr.to_string()[..]);
+                    //result.push_str(&evaluated_expr.to_string()[..]);
+                    context.console.print(&evaluated_expr.to_string());
                     if i == &self.expressions.len() - 1 {
                         if let Some(PrintSeparator::Semicolon) = separator {
                             newline_at_the_end = false;
                         }
                     }
                 },
+                (PrintElementWrapper::Tab(position_expr), _) => {
+                    match position_expr.eval(context) {                        
+                        ExpressionEvalResult::IntegerResult(position) => {
+                            context.console.adjust_to_position(position as usize);
+                        },
+                        _ => todo!()
+                    }                        
+                },
                 _ => {}
             }
             i += 1;
         }
 
-        if newline_at_the_end {
-            println!("{}", result.to_string());
+        let console = &mut context.console;
+        if newline_at_the_end {            
+            console.print_line("");
         } else {
-            print!("{}", result.to_string());
+            console.print("");
         }
         InstructionResult::EvaluateNext
     }
@@ -696,12 +735,16 @@ impl GwInstruction for GwPrintStat {
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&"PRINT ");
 
-//        let mut result = String::new();
         for print_expr in &self.expressions {
             match print_expr {
-                (Some(expr), _) => {
+                (PrintElementWrapper::Expr(expr), _) => {
                     expr.fill_structure_string(buffer);
                 },
+                (PrintElementWrapper::Tab(position), _) => {
+                    buffer.push_str("TAB(");
+                    position.fill_structure_string(buffer);
+                    buffer.push_str(")");
+                },                
                 _ => {}
             }
             buffer.push_str(";");
@@ -770,8 +813,9 @@ impl GwInstruction for GwInputStat {
         buffer.push_str(&"INPUT ");
 	match &(self.prompt)  {
 	    Some(ptp) => {
+                buffer.push_str("\"");
 		buffer.push_str(ptp.as_str());
-		buffer.push_str(",");
+		buffer.push_str("\",");
 	    }
 	    _ => {}
 	}
@@ -802,6 +846,7 @@ mod eval_tests {
     //    use crate::parser::*;
     use crate::eval::ExpressionEvalResult;
     use crate::eval::*;
+    use crate::eval::context::DefaultConsole;
 
     #[test]
     fn it_tests_basic_eval() {
@@ -828,7 +873,8 @@ mod eval_tests {
 	    pair_instruction_table: HashMap::new(),
 	    real_lines: Some(vec![
 		&program.lines.get(0).unwrap().instruction
-	    ])
+	    ]),
+            console: Box::new(DefaultConsole::new())
         };
 
         context.variables.insert(
@@ -942,7 +988,8 @@ mod eval_tests {
             jump_table: HashMap::new(),
             underlying_program: None,
 	    pair_instruction_table: HashMap::new(),
-	    real_lines: None
+	    real_lines: None,
+            console: Box::new(DefaultConsole::new()),
         }
     }
 

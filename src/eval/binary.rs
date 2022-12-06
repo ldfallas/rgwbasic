@@ -25,26 +25,34 @@ pub enum GwBinaryOperationKind {
 }
 
 trait BinaryOperationEvaluator {
-    fn perform_int_operation(&self, left : i16, right : i16) -> i16;
-    fn perform_double_operation(&self, left : f64, right : f64) -> f64;
+    fn perform_int_operation(&self, left: i16, right: i16) -> i16;
+    fn perform_double_operation(&self, left: f64, right: f64) -> f64;
+    fn perform_string_operation(&self, _left: &String, _right: &String)
+                                -> Result<ExpressionEvalResult, &'static str> {
+        Err("Type mismatch")
+    }
 
     fn evaluate(&self,
                 left_result : &ExpressionEvalResult,
-                right_result : &ExpressionEvalResult) -> ExpressionEvalResult {
+                right_result : &ExpressionEvalResult)
+                -> Result<ExpressionEvalResult, &'static str> {
         match (left_result, right_result) {
             (ExpressionEvalResult::IntegerResult(left),
              ExpressionEvalResult::IntegerResult(right)) =>
-                ExpressionEvalResult::IntegerResult(self.perform_int_operation(*left, *right)),
+                Ok(ExpressionEvalResult::IntegerResult(self.perform_int_operation(*left, *right))),
             (ExpressionEvalResult::DoubleResult(left),
              ExpressionEvalResult::IntegerResult(right)) =>
-                ExpressionEvalResult::DoubleResult(self.perform_double_operation(*left, f64::from(*right))),
+                Ok(ExpressionEvalResult::DoubleResult(self.perform_double_operation(*left, f64::from(*right)))),
             (ExpressionEvalResult::IntegerResult(left),
              ExpressionEvalResult::DoubleResult(right)) =>
-                ExpressionEvalResult::DoubleResult(self.perform_double_operation(f64::from(*left), *right)),
+                              Ok(ExpressionEvalResult::DoubleResult(self.perform_double_operation(f64::from(*left), *right))),
             (ExpressionEvalResult::DoubleResult(left),
              ExpressionEvalResult::DoubleResult(right)) =>
-                ExpressionEvalResult::DoubleResult(self.perform_double_operation(*left, *right)),
-            (_, _) => panic!("Not implemented")
+                Ok(ExpressionEvalResult::DoubleResult(self.perform_double_operation(*left, *right))),
+            (ExpressionEvalResult::StringResult(left),
+             ExpressionEvalResult::StringResult(right)) =>
+                self.perform_string_operation(left, right),
+            (_, _) => Err("Type mismatch")
         }
     }
 }
@@ -118,6 +126,83 @@ impl BinaryOperationEvaluator for DifferentEvaluator {
     }
 }
 
+struct LessThanEvaluator {
+}
+
+impl BinaryOperationEvaluator for LessThanEvaluator {
+    fn perform_int_operation(&self, left: i16, right: i16) -> i16 {
+        bool_to_basic_value(left < right)
+    }
+
+    fn perform_double_operation(&self, left: f64, right: f64) -> f64 {
+        bool_to_basic_value(left < right) as f64
+    }
+
+    fn perform_string_operation(&self, left: &String, right: &String)
+                                -> Result<ExpressionEvalResult, &'static str> {
+        Ok(ExpressionEvalResult::IntegerResult(
+            bool_to_basic_value(left.cmp(right).is_lt())))
+    }
+}
+
+struct GreaterThanEvaluator {
+}
+
+impl BinaryOperationEvaluator for GreaterThanEvaluator {
+    fn perform_int_operation(&self, left: i16, right: i16) -> i16 {
+        bool_to_basic_value(left > right)
+    }
+
+    fn perform_double_operation(&self, left: f64, right: f64) -> f64 {
+        bool_to_basic_value(left > right) as f64
+    }
+
+    fn perform_string_operation(&self, left: &String, right: &String)
+                                -> Result<ExpressionEvalResult, &'static str> {
+        Ok(ExpressionEvalResult::IntegerResult(
+            bool_to_basic_value(left.cmp(right).is_gt())))
+    }
+}
+
+
+struct LessEqualThanEvaluator {
+}
+
+impl BinaryOperationEvaluator for LessEqualThanEvaluator {
+    fn perform_int_operation(&self, left: i16, right: i16) -> i16 {
+        bool_to_basic_value(left <= right)
+    }
+
+    fn perform_double_operation(&self, left: f64, right: f64) -> f64 {
+        bool_to_basic_value(left <= right) as f64
+    }
+
+    fn perform_string_operation(&self, left: &String, right: &String)
+                                -> Result<ExpressionEvalResult, &'static str> {
+        Ok(ExpressionEvalResult::IntegerResult(
+            bool_to_basic_value(left.cmp(right).is_le())))
+    }
+}
+
+
+struct GreaterEqualThanEvaluator {
+}
+
+impl BinaryOperationEvaluator for GreaterEqualThanEvaluator {
+    fn perform_int_operation(&self, left: i16, right: i16) -> i16 {
+        bool_to_basic_value(left >= right)
+    }
+
+    fn perform_double_operation(&self, left: f64, right: f64) -> f64 {
+        bool_to_basic_value(left >= right) as f64
+    }
+
+    fn perform_string_operation(&self, left: &String, right: &String)
+                                -> Result<ExpressionEvalResult, &'static str> {
+        Ok(ExpressionEvalResult::IntegerResult(
+            bool_to_basic_value(left.cmp(right).is_ge())))
+    }
+}
 
 struct TimesEvaluator {
 }
@@ -173,12 +258,11 @@ impl BinaryOperationEvaluator for DivEvaluator {
 
     fn evaluate(&self,
                 left_result : &ExpressionEvalResult,
-                right_result : &ExpressionEvalResult) -> ExpressionEvalResult {
+                right_result : &ExpressionEvalResult) -> Result<ExpressionEvalResult, &'static str> {
         let left_double_value = get_double_value(left_result).unwrap();
         let right_double_value = get_double_value(right_result).unwrap();
-        ExpressionEvalResult::DoubleResult(left_double_value / right_double_value)
+        Ok(ExpressionEvalResult::DoubleResult(left_double_value / right_double_value))
     }
-
 }
 
 
@@ -203,6 +287,10 @@ impl GwBinaryOperation {
             GwBinaryOperationKind::Equal => Box::new(EqualEvaluator {}),
             GwBinaryOperationKind::Different => Box::new(DifferentEvaluator {}),
             GwBinaryOperationKind::Exponent => Box::new(PowEvaluator {}),
+            GwBinaryOperationKind::GreaterThan => Box::new(GreaterThanEvaluator {}),
+            GwBinaryOperationKind::LessThan => Box::new(LessThanEvaluator {}),
+            GwBinaryOperationKind::GreaterEqualThan => Box::new(GreaterEqualThanEvaluator {}),
+            GwBinaryOperationKind::LessEqualThan => Box::new(LessEqualThanEvaluator {}),
             _ => panic!("evaluator not implemented")
         };
 
@@ -223,6 +311,10 @@ impl GwBinaryOperation {
             GwBinaryOperationKind::FloatDiv => buffer.push_str(" / "),
             GwBinaryOperationKind::Different => buffer.push_str(" <> "),
             GwBinaryOperationKind::Exponent => buffer.push_str(" ^ "),
+            GwBinaryOperationKind::GreaterThan => buffer.push_str(" > "),
+            GwBinaryOperationKind::LessThan => buffer.push_str(" < "),
+            GwBinaryOperationKind::GreaterEqualThan => buffer.push_str(" >= "),
+            GwBinaryOperationKind::LessEqualThan => buffer.push_str(" <= "),
             _ => buffer.push_str(" ?? ")
         }
     }
@@ -233,7 +325,7 @@ impl GwExpression for GwBinaryOperation {
     fn eval (&self, context : &mut EvaluationContext) -> ExpressionEvalResult {
         let left_result = self.left.eval(context);
         let right_result = self.right.eval(context);
-        self.evaluator.evaluate(&left_result, &right_result)
+        self.evaluator.evaluate(&left_result, &right_result).unwrap()
     }
     fn fill_structure_string(&self,   val : &mut String) {
         val.push_str("(");
@@ -241,5 +333,14 @@ impl GwExpression for GwBinaryOperation {
         self.fill_operator(val);
         self.right.fill_structure_string(val);
         val.push_str(")");
+    }
+}
+
+#[inline(always)]
+fn bool_to_basic_value(flag: bool) -> i16 {
+    if flag {
+        -1
+    } else {
+        0
     }
 }

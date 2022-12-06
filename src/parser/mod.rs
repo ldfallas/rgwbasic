@@ -31,13 +31,14 @@ use crate::eval::while_instr::{GwWhile, GwWend};
 use crate::eval::for_instr::{GwFor, GwNext};
 use crate::eval::dim_instr::GwDim;
 use crate::eval::def_instr::{GwDefType, DefVarRange};
-use crate::eval::{GwLog, GwInt};
+use crate::eval::{GwAbs, GwLog, GwInt};
 use crate::eval::ProgramLine;
 use crate::eval::GwRem;
 use crate::eval::GwParenthesizedExpr;
 use crate::eval::GwNegExpr;
 use crate::eval::PrintSeparator;
 use crate::eval::context::ExpressionType;
+use crate::eval::PrintElementWrapper;
 
 pub struct PushbackCharsIterator<'a> {
     chars : Chars<'a>,
@@ -104,6 +105,23 @@ fn recognize_specific_char<'a>(iterator : &mut PushbackCharsIterator<'a>, c : ch
     }
 }
 
+fn recognize_two_char_op<'a>(iterator : &mut PushbackCharsIterator<'a>,
+                             c1: char,
+                             c2: char) -> bool {
+    if recognize_specific_char(iterator, c1) {
+        if recognize_specific_char(iterator, c2) {
+            true
+        } else {
+            iterator.push_back(c1);
+            false
+        }
+    } else {
+        false
+    }
+
+}
+
+
 fn recognize_eol<'a>(iterator : &mut PushbackCharsIterator<'a>) -> bool {
     if let Some(next_char) = iterator.next()  {
         iterator.push_back(next_char);
@@ -168,13 +186,14 @@ fn recognize_string_literal<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Op
     if let Some(next_char) = iterator.next() {
         if next_char == '"' {
             let mut result = String::new();
-            result.push(next_char);
+            //result.push(next_char);
             loop {
                 if let Some(next_char) = iterator.next() {
-                    result.push(next_char);
+                    //result.push(next_char);
                     if next_char == '"' {
                        return Some(result);
                     }
+                    result.push(next_char);
                 } else {
                     return Some(result);
                 }
@@ -336,9 +355,20 @@ impl<'a> PushbackTokensIterator<'a> {
             return Some(GwToken::Keyword(tokens::GwBasicToken::RparTok));
         } else if recognize_specific_char(&mut self.chars_iterator, ':') {
             return Some(GwToken::Keyword(tokens::GwBasicToken::ColonSeparatorTok));
-        } else if recognize_specific_char(&mut self.chars_iterator, '<')
-                  && recognize_specific_char(&mut self.chars_iterator, '>') {
-            return Some(GwToken::Keyword(tokens::GwBasicToken::DifferentTok));
+        } else if recognize_specific_char(&mut self.chars_iterator, '<') {
+            if recognize_specific_char(&mut self.chars_iterator, '>') {
+                return Some(GwToken::Keyword(tokens::GwBasicToken::DifferentTok));
+            } else if recognize_specific_char(&mut self.chars_iterator, '=') {
+                return Some(GwToken::Keyword(tokens::GwBasicToken::LteTok));                
+            } else  {
+                return Some(GwToken::Keyword(tokens::GwBasicToken::LtTok));
+            }
+        } else if recognize_specific_char(&mut self.chars_iterator, '>') {
+            if recognize_specific_char(&mut self.chars_iterator, '=') {
+                return Some(GwToken::Keyword(tokens::GwBasicToken::GteTok));
+            } else {
+                return Some(GwToken::Keyword(tokens::GwBasicToken::GtTok));
+            }
         } else if recognize_specific_char(&mut self.chars_iterator, ';') {
             return Some(GwToken::Keyword(tokens::GwBasicToken::SemiColonSeparatorTok));
         } else if recognize_specific_char(&mut self.chars_iterator, ',') {
@@ -378,6 +408,7 @@ pub enum IdExpressionResult<T> {
 
 fn is_builtin_function(func_name: &String) -> bool {
     match func_name.as_str() {
+        "ABS" => true,
         "LOG" => true,
         "INT" => true,
         _ => false
@@ -387,6 +418,7 @@ fn create_builtin_function(func_name: &String, args: Vec<Box<dyn GwExpression>>)
                            -> Option<Box<dyn GwExpression>> {
     let mut mut_args = args;
     match func_name.as_str() {
+        "ABS" if mut_args.len() == 1 => Some(Box::new(GwAbs { expr: mut_args.remove(0) })),
         "LOG" if mut_args.len() == 1 => Some(Box::new(GwLog { expr: mut_args.remove(0) })),
         "INT" if mut_args.len() == 1 => Some(Box::new(GwInt { expr: mut_args.remove(0) })),
         _ => None
@@ -629,6 +661,10 @@ fn get_operation_kind_from_token(token : &tokens::GwBasicToken)
         tokens::GwBasicToken::EqlTok => Some(GwBinaryOperationKind::Equal),
         tokens::GwBasicToken::DifferentTok => Some(GwBinaryOperationKind::Different),
         tokens::GwBasicToken::PowOperatorTok => Some(GwBinaryOperationKind::Exponent),
+        tokens::GwBasicToken::LtTok => Some(GwBinaryOperationKind::LessThan),
+        tokens::GwBasicToken::GtTok => Some(GwBinaryOperationKind::GreaterThan),
+        tokens::GwBasicToken::LteTok => Some(GwBinaryOperationKind::LessEqualThan),
+        tokens::GwBasicToken::GteTok => Some(GwBinaryOperationKind::GreaterEqualThan),        
         _ => None
     }
 }
@@ -685,9 +721,12 @@ pub fn parse_additive_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
 fn is_comparison_operation_token(token : &GwToken)
                                  -> Option<&tokens::GwBasicToken> {
     match token {
-        GwToken::Keyword(tok@tokens::GwBasicToken::EqlTok) =>
-            Some(tok),
-        GwToken::Keyword(tok@tokens::GwBasicToken::DifferentTok) =>
+        GwToken::Keyword(tok@(tokens::GwBasicToken::EqlTok
+                              | tokens::GwBasicToken::DifferentTok
+                              | tokens::GwBasicToken::LtTok
+                              | tokens::GwBasicToken::GtTok
+                              | tokens::GwBasicToken::LteTok
+                              | tokens::GwBasicToken::GteTok)) =>
             Some(tok),
         _ => None
     }
@@ -779,23 +818,20 @@ fn parse_print_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
         }
     }
 
-    if let ParserResult::Success(exprs) =
-        parse_with_flexible_separator(
-            iterator,
-            parse_expression) {
-            if is_using  {
-                return ParserResult::Success(Box::new(
-                    GwPrintUsingStat {
-                        expressions: exprs
-                    }
-                ));
-            } else {
-                return ParserResult::Success(Box::new(
-                    GwPrintStat {
-                        expressions: exprs
-                    }
-                ));
-            }
+    if let ParserResult::Success(exprs) = parse_with_flexible_separator(iterator) {
+        if is_using  {
+            return ParserResult::Success(Box::new(
+                GwPrintUsingStat {
+                    expressions: exprs
+                }
+            ));
+        } else {
+            return ParserResult::Success(Box::new(
+                GwPrintStat {
+                    expressions: exprs
+                }
+            ));
+        }
     } else {
         return ParserResult::Error(String::from("Expecting expression as PRINT argument"));
     }
@@ -938,9 +974,16 @@ fn parse_for_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
     ]
 }
 
-fn parse_next_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
+fn parse_next_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
 		       -> ParserResult<Box<dyn GwInstruction>> {
-    return ParserResult::Success(Box::new(GwNext{ variable: None}));
+    let mut next_var: Option<String> = None;
+    let next_tok = iterator.next();
+    if let Some(GwToken::Identifier(id)) = next_tok {
+        next_var = Some(id);
+    } else if let Some(tok) = next_tok {
+        iterator.push_back(tok);
+    };
+    return ParserResult::Success(Box::new(GwNext{ variable: next_var}));
 }
 
 fn parse_wend_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
@@ -1150,25 +1193,54 @@ fn parse_with_separator<'a, F,T>(
     return ParserResult::Success(result);
 }
 
+
+fn parse_optional_tab<'a>(iterator : &mut PushbackTokensIterator<'a>)
+                          -> ParserResult<PrintElementWrapper> {
+    let next_token_opt = iterator.next();
+    if let Some(next_token) = next_token_opt {
+        if let GwToken::Keyword(tokens::GwBasicToken::TabTok) = next_token {
+            parse_seq![
+	        iterator,
+	        {
+	            token(GwToken::Keyword(tokens::GwBasicToken::LparTok),
+                          "Expecting left parenthesis");
+                    parse_success(tabs, parse_expression(iterator));
+                    token(GwToken::Keyword(tokens::GwBasicToken::RparTok),
+                          "Expecting right parenthesis");
+	        },
+	        {
+	            return ParserResult::Success(PrintElementWrapper::Tab(tabs));
+	        }
+            ]
+        } else {
+            iterator.push_back(next_token);
+        }        
+    }
+    return ParserResult::Nothing;        
+}
+
 //
-fn parse_with_flexible_separator<'a, F,T>(
-    iterator : &mut PushbackTokensIterator<'a>,
-    item_parse_fn  : F) ->
-     ParserResult<Vec<(Option<T>, Option<PrintSeparator>)>>
-  where F : Fn(&mut PushbackTokensIterator<'a>) -> ParserResult<T>  {
+fn parse_with_flexible_separator<'a>(
+    iterator : &mut PushbackTokensIterator<'a>) ->
+     ParserResult<Vec<(PrintElementWrapper, Option<PrintSeparator>)>> {
     let mut result = Vec::new();
     loop {
-        let mut item_result: Option<T> = None;
+        let mut item_result: PrintElementWrapper = PrintElementWrapper::Nothing;
         let mut last_nothing = false;
-        match item_parse_fn(iterator) {
-            ParserResult::Success(item) => {
-                item_result = Some(item);
-            },
-            ParserResult::Error(error) => {
-                return ParserResult::Error(error);
-            },
-            ParserResult::Nothing => {
-                last_nothing = true;
+        let tab_parsing =  parse_optional_tab(iterator);
+        if let ParserResult::Success(tab_invocation) = tab_parsing {
+            item_result = tab_invocation;
+        } else {
+            match parse_expression(iterator) {
+                ParserResult::Success(item) => {
+                    item_result = PrintElementWrapper::Expr(item);
+                },
+                ParserResult::Error(error) => {
+                    return ParserResult::Error(error);
+                },
+                ParserResult::Nothing => {
+                    last_nothing = true;
+                }
             }
         }
         let next_token = iterator.next();
@@ -1181,7 +1253,8 @@ fn parse_with_flexible_separator<'a, F,T>(
                 result.push((item_result, Some(PrintSeparator::Comma)));
                 continue;
             }
-            (Some(next@GwToken::Keyword(tokens::GwBasicToken::ColonSeparatorTok)), None) => {
+            (Some(next@GwToken::Keyword(tokens::GwBasicToken::ColonSeparatorTok)),
+             PrintElementWrapper::Nothing) => {
                 iterator.push_back(next);
                 break;
             },
@@ -1199,11 +1272,11 @@ fn parse_with_flexible_separator<'a, F,T>(
                 iterator.push_back(token_result);
                 break;
             },
-            (_, Some(_)) => {
+            (_, PrintElementWrapper::Expr(_) | PrintElementWrapper::Tab(_)) => {
                 result.push((item_result, None));
                 break;
             }
-            (_, None) => break,
+            (_, PrintElementWrapper::Nothing) => break,
         }
     }
     return ParserResult::Success(result);
@@ -1237,8 +1310,6 @@ fn parse_color_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
         return ParserResult::Error(String::from("Error recognizing colors"));
     }
 }
-
-
 
 fn parse_goto_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
                         -> ParserResult<Box<dyn GwInstruction>> {
@@ -1542,6 +1613,62 @@ mod parser_tests {
         }
     }
 
+    #[test]
+    fn it_parses_less_than() -> Result<(), & 'static str> {
+        let str = "ab < bc";
+        match quick_parse_expr(str) {
+            ParserResult::Success(expr) => {
+                let mut buf = String::new();
+                expr.fill_structure_string(&mut buf);
+                assert_eq!(buf, String::from("(AB < BC)"));
+                Ok(())
+            }
+            _ => Err("Less than not parsed")
+        }
+    }
+
+    #[test]
+    fn it_parses_greater_than() -> Result<(), & 'static str> {
+        let str = "ab > bc";
+        match quick_parse_expr(str) {
+            ParserResult::Success(expr) => {
+                let mut buf = String::new();
+                expr.fill_structure_string(&mut buf);
+                assert_eq!(buf, String::from("(AB > BC)"));
+                Ok(())
+            }
+            _ => Err("'Greater-than' not parsed")
+        }
+    }
+
+    #[test]
+    fn it_parses_less_than_equal() -> Result<(), & 'static str> {
+        let str = "ab <= bc";
+        match quick_parse_expr(str) {
+            ParserResult::Success(expr) => {
+                let mut buf = String::new();
+                expr.fill_structure_string(&mut buf);
+                assert_eq!(buf, String::from("(AB <= BC)"));
+                Ok(())
+            }
+            _ => Err("'Less-than-equal' not parsed")
+        }
+    }
+
+    #[test]
+    fn it_parses_greater_than_equal() -> Result<(), & 'static str> {
+        let str = "ab >= bc";
+        match quick_parse_expr(str) {
+            ParserResult::Success(expr) => {
+                let mut buf = String::new();
+                expr.fill_structure_string(&mut buf);
+                assert_eq!(buf, String::from("(AB >= BC)"));
+                Ok(())
+            }
+            _ => Err("'Greater-than-equal' not parsed")
+        }
+    }    
+
 
     #[test]
     fn it_parses_minus() {
@@ -1735,14 +1862,13 @@ mod parser_tests {
             pushed_back: None
         };
         let mut tokens_iterator = PushbackTokensIterator::create(pb);
-        match parse_with_flexible_separator(&mut tokens_iterator,
-                                            parse_expression)  {
+        match parse_with_flexible_separator(&mut tokens_iterator)  {
             ParserResult::Success(vect) => {
                 match vect[..] {
-                    [(Some(ref arg1), Some(PrintSeparator::Semicolon)),
-                     (Some(ref arg2), Some(PrintSeparator::Semicolon)),
-                     (None,           Some(PrintSeparator::Semicolon)),
-                     (Some(ref arg3), Some(PrintSeparator::Semicolon))
+                    [(PrintElementWrapper::Expr(ref arg1), Some(PrintSeparator::Semicolon)),
+                     (PrintElementWrapper::Expr(ref arg2), Some(PrintSeparator::Semicolon)),
+                     (PrintElementWrapper::Nothing,        Some(PrintSeparator::Semicolon)),
+                     (PrintElementWrapper::Expr(ref arg3), Some(PrintSeparator::Semicolon))
                     ] => {
                         let mut buf = String::new();
                         arg1.fill_structure_string(&mut buf);
@@ -1771,14 +1897,13 @@ mod parser_tests {
             pushed_back: None
         };
         let mut tokens_iterator = PushbackTokensIterator::create(pb);
-        match parse_with_flexible_separator(&mut tokens_iterator,
-                                            parse_expression)  {
+        match parse_with_flexible_separator(&mut tokens_iterator)  {
             ParserResult::Success(vect) => {
                 match vect[..] {
-                    [(Some(ref arg1), Some(PrintSeparator::Comma)),
-                     (Some(ref arg2), None),
-                     (Some(ref arg3), None),
-                     (Some(ref arg4), None)
+                    [(PrintElementWrapper::Expr(ref arg1), Some(PrintSeparator::Comma)),
+                     (PrintElementWrapper::Expr(ref arg2), None),
+                     (PrintElementWrapper::Expr(ref arg3), None),
+                     (PrintElementWrapper::Expr(ref arg4), None)
                     ] => {
                         let mut buf = String::new();
                         arg1.fill_structure_string(&mut buf);
@@ -1808,11 +1933,10 @@ mod parser_tests {
             pushed_back: None
         };
         let mut tokens_iterator = PushbackTokensIterator::create(pb);
-        match parse_with_flexible_separator(&mut tokens_iterator,
-                                            parse_expression)  {
+        match parse_with_flexible_separator(&mut tokens_iterator)  {
             ParserResult::Success(vect) => {
                 match vect[..] {
-                    [(Some(ref arg1), None)] => {
+                    [(PrintElementWrapper::Expr(ref arg1), None)] => {
                         let mut buf = String::new();
                         arg1.fill_structure_string(&mut buf);
                         assert_eq!(buf, "AB");
@@ -1832,8 +1956,7 @@ mod parser_tests {
             pushed_back: None
         };
         let mut tokens_iterator = PushbackTokensIterator::create(pb);
-        match parse_with_flexible_separator(&mut tokens_iterator,
-                                            parse_expression)  {
+        match parse_with_flexible_separator(&mut tokens_iterator)  {
             ParserResult::Success(vect) => {
                 match vect[..] {
                     [] => { assert!(true); }
@@ -2047,5 +2170,14 @@ mod parser_tests {
         }
     }
 
+    fn quick_parse_expr(code: &str)
+                 -> ParserResult<Box<dyn GwExpression>> {
+        let pb = PushbackCharsIterator {
+            chars: code.chars(),
+            pushed_back: None
+        };
+        let mut tokens_iterator = PushbackTokensIterator::create(pb);
+        parse_expression(&mut tokens_iterator)
+    }
 
 }

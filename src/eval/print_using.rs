@@ -6,11 +6,12 @@ use super::{
     GwInstruction,
     LineExecutionArgument,
     GwExpression,
-    PrintSeparator
+    PrintSeparator,
+    PrintElementWrapper
 };
 
 pub struct GwPrintUsingStat {
-    pub expressions : Vec<(Option<Box<dyn GwExpression>>, Option<PrintSeparator>)>
+    pub expressions : Vec<(PrintElementWrapper, Option<PrintSeparator>)>
 }
 
 impl GwPrintUsingStat {
@@ -26,7 +27,7 @@ impl GwPrintUsingStat {
                 PrintUsingFormatFragment::Numeric { dollar, digits, comma, decimals, rest} => {
                     tmp_format = rest;
                     let mut value_to_use = 0 as f64;
-                    if let Some((Some(arg), _)) = self.expressions.get(arg_i) {
+                    if let Some((PrintElementWrapper::Expr(arg), _)) = self.expressions.get(arg_i) {
                         match arg.eval(context) {
                             ExpressionEvalResult::DoubleResult(dbl) => {
                                 value_to_use  = dbl;
@@ -74,7 +75,7 @@ impl GwInstruction for GwPrintUsingStat {
              _line: i16,
              _arg: LineExecutionArgument,
              context: &mut EvaluationContext) -> InstructionResult {        
-        if let Some((Some(expr), _)) = self.expressions.get(0) {
+        if let Some((PrintElementWrapper::Expr(expr), _)) = self.expressions.get(0) {
             if let ExpressionEvalResult::StringResult( a_atr) = expr.eval(context) {
                 let mut format_string = &a_atr.as_str();
                 return self.print_formatted_string(format_string, context);

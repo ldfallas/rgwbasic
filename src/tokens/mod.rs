@@ -198,6 +198,8 @@ pub enum GwBasicToken {
     LparTok,
     RparTok,
     DifferentTok,
+    GteTok,
+    LteTok,
     Untokenized(u8)
 }
 
@@ -235,6 +237,7 @@ impl GwTokenInfo {
         GwTokenInfo::add_token("REM", GwBasicToken::RemTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("RUN", GwBasicToken::RunTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("SYSTEM", GwBasicToken::SystemTok, &mut dict, &mut dict2);
+        GwTokenInfo::add_token("TAB", GwBasicToken::TabTok, &mut dict, &mut dict2);        
         GwTokenInfo::add_token("THEN", GwBasicToken::ThenTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("TO", GwBasicToken::ToTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("USING", GwBasicToken::UsingTok, &mut dict, &mut dict2);
