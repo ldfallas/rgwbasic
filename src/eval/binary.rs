@@ -26,6 +26,7 @@ pub enum GwBinaryOperationKind {
 
 trait BinaryOperationEvaluator {
     fn perform_int_operation(&self, left: i16, right: i16) -> i16;
+    fn perform_single_operation(&self, left: f32, right: f32) -> f32;
     fn perform_double_operation(&self, left: f64, right: f64) -> f64;
     fn perform_string_operation(&self, _left: &String, _right: &String)
                                 -> Result<ExpressionEvalResult, &'static str> {
@@ -37,22 +38,58 @@ trait BinaryOperationEvaluator {
                 right_result : &ExpressionEvalResult)
                 -> Result<ExpressionEvalResult, &'static str> {
         match (left_result, right_result) {
-            (ExpressionEvalResult::IntegerResult(left),
-             ExpressionEvalResult::IntegerResult(right)) =>
-                Ok(ExpressionEvalResult::IntegerResult(self.perform_int_operation(*left, *right))),
-            (ExpressionEvalResult::DoubleResult(left),
-             ExpressionEvalResult::IntegerResult(right)) =>
-                Ok(ExpressionEvalResult::DoubleResult(self.perform_double_operation(*left, f64::from(*right)))),
-            (ExpressionEvalResult::IntegerResult(left),
-             ExpressionEvalResult::DoubleResult(right)) =>
-                              Ok(ExpressionEvalResult::DoubleResult(self.perform_double_operation(f64::from(*left), *right))),
-            (ExpressionEvalResult::DoubleResult(left),
-             ExpressionEvalResult::DoubleResult(right)) =>
-                Ok(ExpressionEvalResult::DoubleResult(self.perform_double_operation(*left, *right))),
+            (ExpressionEvalResult::IntegerResult(left), right) => self.evaluate_int_vs(*left, right),
+            (ExpressionEvalResult::SingleResult(left), right) =>  self.evaluate_single_vs(*left, right),            
+            (ExpressionEvalResult::DoubleResult(left), right) =>  self.evaluate_double_vs(*left, right),
             (ExpressionEvalResult::StringResult(left),
              ExpressionEvalResult::StringResult(right)) =>
                 self.perform_string_operation(left, right),
             (_, _) => Err("Type mismatch")
+        }
+    }
+
+    fn evaluate_int_vs(&self,
+                left: i16,
+                right_result: &ExpressionEvalResult)
+                -> Result<ExpressionEvalResult, &'static str> {
+        match right_result {
+             ExpressionEvalResult::IntegerResult(right) =>
+                Ok(ExpressionEvalResult::IntegerResult(self.perform_int_operation(left, *right))),
+            ExpressionEvalResult::DoubleResult(right) =>
+                Ok(ExpressionEvalResult::DoubleResult(self.perform_double_operation(f64::from(left), *right))),
+            ExpressionEvalResult::SingleResult(right) =>
+                Ok(ExpressionEvalResult::SingleResult(self.perform_single_operation(f32::from(left), *right))),
+            _  => Err("Type mismatch")
+        }
+    }
+
+    fn evaluate_single_vs(&self,
+                          left: f32,
+                          right_result : &ExpressionEvalResult)
+                -> Result<ExpressionEvalResult, &'static str> {
+        match right_result {
+             ExpressionEvalResult::IntegerResult(right) =>
+                Ok(ExpressionEvalResult::SingleResult(self.perform_single_operation(left, f32::from(*right)))),
+            ExpressionEvalResult::DoubleResult(right) =>
+                Ok(ExpressionEvalResult::DoubleResult(self.perform_double_operation(f64::from(left), *right))),
+            ExpressionEvalResult::SingleResult(right) =>
+                Ok(ExpressionEvalResult::SingleResult(self.perform_single_operation(left, *right))),
+            _  => Err("Type mismatch")
+        }
+    }
+
+    fn evaluate_double_vs(&self,
+                          left: f64,
+                          right_result : &ExpressionEvalResult)
+                -> Result<ExpressionEvalResult, &'static str> {
+        match right_result {
+             ExpressionEvalResult::IntegerResult(right) =>
+                Ok(ExpressionEvalResult::DoubleResult(self.perform_double_operation(left, f64::from(*right)))),
+            ExpressionEvalResult::DoubleResult(right) =>
+                Ok(ExpressionEvalResult::DoubleResult(self.perform_double_operation(f64::from(left), *right))),
+            ExpressionEvalResult::SingleResult(right) =>
+                Ok(ExpressionEvalResult::DoubleResult(self.perform_double_operation(left , f64::from(*right)))),
+            _  => Err("Type mismatch")
         }
     }
 }
@@ -65,6 +102,10 @@ impl BinaryOperationEvaluator for PlusEvaluator {
         left + right
     }
 
+    fn perform_single_operation(&self, left : f32, right : f32) -> f32 {
+        left + right
+    }
+    
     fn perform_double_operation(&self, left : f64, right : f64) -> f64 {
         left + right
     }
@@ -75,6 +116,10 @@ struct MinusEvaluator {
 
 impl BinaryOperationEvaluator for MinusEvaluator {
     fn perform_int_operation(&self, left : i16, right : i16) -> i16 {
+        left - right
+    }
+
+    fn perform_single_operation(&self, left : f32, right : f32) -> f32 {
         left - right
     }
 
@@ -95,6 +140,14 @@ impl BinaryOperationEvaluator for EqualEvaluator {
         }
     }
 
+    fn perform_single_operation(&self, left : f32, right : f32) -> f32 {
+        if left == right {
+            -1.0
+        } else {
+            0.0
+        }
+    }
+    
     fn perform_double_operation(&self, left : f64, right : f64) -> f64 {
         if left == right {
             -1.0
@@ -117,6 +170,14 @@ impl BinaryOperationEvaluator for DifferentEvaluator {
         }
     }
 
+    fn perform_single_operation(&self, left : f32, right : f32) -> f32 {
+        if left != right {
+            -1.0
+        } else {
+            0.0
+        }
+    }
+
     fn perform_double_operation(&self, left : f64, right : f64) -> f64 {
         if left != right {
             -1.0
@@ -134,6 +195,10 @@ impl BinaryOperationEvaluator for LessThanEvaluator {
         bool_to_basic_value(left < right)
     }
 
+    fn perform_single_operation(&self, left: f32, right: f32) -> f32 {
+        bool_to_basic_value(left < right) as f32
+    }
+    
     fn perform_double_operation(&self, left: f64, right: f64) -> f64 {
         bool_to_basic_value(left < right) as f64
     }
@@ -153,6 +218,10 @@ impl BinaryOperationEvaluator for GreaterThanEvaluator {
         bool_to_basic_value(left > right)
     }
 
+    fn perform_single_operation(&self, left: f32, right: f32) -> f32 {
+        bool_to_basic_value(left > right) as f32
+    }
+    
     fn perform_double_operation(&self, left: f64, right: f64) -> f64 {
         bool_to_basic_value(left > right) as f64
     }
@@ -177,6 +246,10 @@ impl BinaryOperationEvaluator for LessEqualThanEvaluator {
         bool_to_basic_value(left <= right) as f64
     }
 
+    fn perform_single_operation(&self, left: f32, right: f32) -> f32 {
+        bool_to_basic_value(left <= right) as f32
+    }
+
     fn perform_string_operation(&self, left: &String, right: &String)
                                 -> Result<ExpressionEvalResult, &'static str> {
         Ok(ExpressionEvalResult::IntegerResult(
@@ -197,6 +270,10 @@ impl BinaryOperationEvaluator for GreaterEqualThanEvaluator {
         bool_to_basic_value(left >= right) as f64
     }
 
+    fn perform_single_operation(&self, left: f32, right: f32) -> f32 {
+        bool_to_basic_value(left >= right) as f32
+    }
+
     fn perform_string_operation(&self, left: &String, right: &String)
                                 -> Result<ExpressionEvalResult, &'static str> {
         Ok(ExpressionEvalResult::IntegerResult(
@@ -215,6 +292,10 @@ impl BinaryOperationEvaluator for TimesEvaluator {
     fn perform_double_operation(&self, left : f64, right : f64) -> f64 {
         left * right
     }
+    
+    fn perform_single_operation(&self, left : f32, right : f32) -> f32 {
+        left * right
+    }
 }
 
 struct PowEvaluator {
@@ -231,6 +312,10 @@ impl BinaryOperationEvaluator for PowEvaluator {
     }
 
     fn perform_double_operation(&self, left : f64, right : f64) -> f64 {
+        left.powf(right)
+    }
+
+    fn perform_single_operation(&self, left : f32, right : f32) -> f32 {
         left.powf(right)
     }
 }
@@ -252,6 +337,10 @@ impl BinaryOperationEvaluator for DivEvaluator {
         left / right
     }
 
+    fn perform_single_operation(&self, left : f32, right : f32) -> f32 {
+        left / right
+    }
+    
     fn perform_double_operation(&self, left : f64, right : f64) -> f64 {
         left / right
     }

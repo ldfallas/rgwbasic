@@ -101,6 +101,7 @@ pub trait Console {
             self.print(" ");
         }            
     }
+    fn flush(&self);
 }
 
 pub struct DefaultConsole {
@@ -131,6 +132,9 @@ impl Console for DefaultConsole {
     }
     fn current_text_column(&self) -> usize{
         self.column_position + 1
+    }
+    fn flush(&self)  {
+        io::stdout().flush().expect("Success");
     }
 }
 

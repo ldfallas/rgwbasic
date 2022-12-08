@@ -16,56 +16,65 @@ pub struct GwPrintUsingStat {
 
 impl GwPrintUsingStat {
     pub fn print_formatted_string(&self, format_string: &str, context: &mut EvaluationContext) -> InstructionResult {
-        let mut tmp_format = &format_string[1..(format_string.len() - 1)];
         let mut arg_i = 1;
         loop {
-            match tok_format_string(tmp_format) {
-                PrintUsingFormatFragment::Literal(literal, rest) => {                  
-                    print!("{}", literal);
-                    tmp_format = rest;
-                }
-                PrintUsingFormatFragment::Numeric { dollar, digits, comma, decimals, rest} => {
-                    tmp_format = rest;
-                    let mut value_to_use = 0 as f64;
-                    if let Some((PrintElementWrapper::Expr(arg), _)) = self.expressions.get(arg_i) {
-                        match arg.eval(context) {
-                            ExpressionEvalResult::DoubleResult(dbl) => {
-                                value_to_use  = dbl;
-                            }
-                            ExpressionEvalResult::SingleResult(dbl) => {
-                                value_to_use  = dbl as f64;
-                            }
-
-                            ExpressionEvalResult::IntegerResult(ival) => {
-                                value_to_use  = ival as f64;
-                            }
-                            _ => {
-                                return InstructionResult::EvaluateToError(String::from("Invalid value"))
-                            }
-                        }
-                    } else {
-                        todo!();
+            let mut tmp_format = &format_string[..];
+            loop {
+                match tok_format_string(tmp_format) {
+                    PrintUsingFormatFragment::Literal(literal, rest) => {
+                        context.console.print(literal);
+                        tmp_format = rest;
                     }
+                    PrintUsingFormatFragment::Numeric { dollar, digits, comma, decimals, rest} => {
+                        tmp_format = rest;
+                        let mut value_to_use = 0 as f64;
+                        if let Some((PrintElementWrapper::Expr(arg), _)) = self.expressions.get(arg_i) {
+                            match arg.eval(context) {
+                                ExpressionEvalResult::DoubleResult(dbl) => {
+                                    value_to_use  = dbl;
+                                }
+                                ExpressionEvalResult::SingleResult(dbl) => {
+                                    value_to_use  = dbl as f64;
+                                }
 
-                    let mut format_buf = String::new();
-                    format_number(value_to_use,
-                                  dollar,
-                                  digits,
-                                  comma,
-                                  decimals,
-                                  &mut format_buf);
-                    print!("{}", format_buf);
-                    tmp_format = rest;
-                    arg_i += 1;
-                },
-                PrintUsingFormatFragment::End(last) => {
-                    print!("{}", last);
-                    break;
+                                ExpressionEvalResult::IntegerResult(ival) => {
+                                    value_to_use  = ival as f64;
+                                }
+                                _ => {
+                                    return InstructionResult::EvaluateToError(String::from("Invalid value"))
+                                }
+                            }
+                        } else {
+                            todo!();
+                        }
+
+                        let mut format_buf = String::new();
+                        format_number(value_to_use,
+                                      dollar,
+                                      digits,
+                                      comma,
+                                      decimals,
+                                      &mut format_buf);
+                        context.console.print(format_buf.as_str());
+                        tmp_format = rest;
+                        arg_i += 1;
+                    },
+                    PrintUsingFormatFragment::End(last) => {
+                        context.console.print(last);
+                        break;
+                    }
                 }
             }
+            if arg_i == self.expressions.len() && arg_i != 1 {
+                break;
+            }
+        }
+        match self.expressions.last() {
+            Some((_, Some(PrintSeparator::Semicolon))) => {
+            }
+            _ => { context.console.print_line(""); }
         }
         InstructionResult::EvaluateNext
-
     }
 
 }
@@ -74,7 +83,7 @@ impl GwInstruction for GwPrintUsingStat {
     fn eval (&self,
              _line: i16,
              _arg: LineExecutionArgument,
-             context: &mut EvaluationContext) -> InstructionResult {        
+             context: &mut EvaluationContext) -> InstructionResult {
         if let Some((PrintElementWrapper::Expr(expr), _)) = self.expressions.get(0) {
             if let ExpressionEvalResult::StringResult( a_atr) = expr.eval(context) {
                 let mut format_string = &a_atr.as_str();
@@ -264,7 +273,7 @@ mod print_using_tests {
         } else {
             Err("Format not recognized")
         }
-    }   
+    }
 
     #[test]
     fn it_process_string_with_single_number_format() {

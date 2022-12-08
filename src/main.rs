@@ -34,6 +34,7 @@ fn main() -> io::Result<()> {
                 parser::ParserResult::Success(parsed_instr) => {
                     let mut context = eval::EvaluationContext::with_program(&mut program);
                     parsed_instr.eval(-1, eval::LineExecutionArgument::Empty, &mut context);
+                    context.console.flush();
                 }
                 parser::ParserResult::Error(msg) => {
                     println!("Error parsing command {}", msg);

@@ -15,7 +15,8 @@ use std::process::exit;
 
 pub use crate::eval::context::{EvaluationContext,
 			       ExpressionEvalResult,
-			       GwVariableType,
+                               ExpressionType,
+			       GwVariableType,                               
 			       GwInstruction,
 			       GwProgram,
                                LineExecutionArgument,
@@ -551,6 +552,9 @@ impl GwInstruction for GwAssign {
              _arg: LineExecutionArgument,
              context : &mut EvaluationContext) -> InstructionResult{
         let expression_evaluation = self.expression.eval(context);
+        if let None = context.get_variable_type(&self.variable) {
+            context.set_variable_type(&self.variable, &ExpressionType::Single);
+        }
         context.set_variable(&self.variable, &expression_evaluation);
         InstructionResult::EvaluateNext
     }
