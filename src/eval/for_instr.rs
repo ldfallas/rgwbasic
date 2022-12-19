@@ -1,12 +1,29 @@
 use super::{GwExpression, GwInstruction, EvaluationContext,
             LineExecutionArgument,
-            InstructionResult, ExpressionEvalResult};
+            InstructionResult, ExpressionEvalResult, evaluate_to_usize};
 
 pub struct GwFor {
     pub variable: String,
     pub from: Box<dyn GwExpression>,
     pub to: Box<dyn GwExpression>,
     pub step: Option<Box<dyn GwExpression>>,
+}
+
+impl GwFor {
+    fn try_next_iteration(&self,
+                          next_line : i16,
+                          context: &mut EvaluationContext)
+                          -> Result<InstructionResult, String> {
+        let n_value = get_as_integer(& context.lookup_variable(&self.variable))? as usize;
+        let to_i_value = evaluate_to_usize(&self.to, context)?;
+        if to_i_value <= n_value {
+            Ok(InstructionResult::EvaluateLine(next_line + 1))
+        } else {
+            let new_value = ExpressionEvalResult::IntegerResult((n_value as i16) + 1);
+            context.set_variable(&self.variable, &new_value)?;
+            Ok(InstructionResult::EvaluateNext)
+        }
+    }
 }
 
 impl GwInstruction for GwFor {
@@ -29,30 +46,21 @@ impl GwInstruction for GwFor {
         }
 
         if let LineExecutionArgument::NextIteration = arg {
-            let variable_value = context.lookup_variable(&self.variable);
-            if let Some(n_value) = get_as_integer(&variable_value) {
-                let to_value = self.to.eval(context);
-                if let Some(to_i_value) = get_as_integer(&Some(&to_value)) {
-                    if to_i_value <= n_value {
-                        InstructionResult::EvaluateLine(next_line + 1)
-                    } else {
-                        let new_value = ExpressionEvalResult::IntegerResult(n_value + 1);
-                        context.set_variable(&self.variable, &new_value);
-                        InstructionResult::EvaluateNext
-                    }
+            match self.try_next_iteration(next_line, context) {
+                Ok(result) => result,
+                Err(err) => InstructionResult::EvaluateToError(err)
+            }
+        } else {
+            if let Ok(result) = self.from.eval(context) {
+                let assign_result = context.set_variable(&self.variable, &result);
+                if assign_result.is_ok() {
+                    InstructionResult::EvaluateNext
+                } else {
+                    InstructionResult::EvaluateToError(assign_result.err().unwrap().to_string())
                 }
-                else {
-                    todo!();
-                }
-
-            } else{
+            } else {
                 todo!();
             }
-
-        } else {
-            let result = self.from.eval(context);
-            context.set_variable(&self.variable, &result);
-            InstructionResult::EvaluateNext
         }
     }
 
@@ -92,6 +100,8 @@ fn find_next(line: i16, real_lines: &Vec<&Box<dyn GwInstruction>>) -> i16 {
 }
 
 
+
+
 pub struct GwNext {
     pub variable: Option<String>
 }
@@ -118,12 +128,12 @@ impl GwInstruction for GwNext {
     }
 }
 
-fn get_as_integer(value: &Option<&ExpressionEvalResult>) -> Option<i16> {
+fn get_as_integer(value: &Option<&ExpressionEvalResult>) -> Result<i16, String> {
     match value {
-        Some(ExpressionEvalResult::IntegerResult(int_value)) =>  Some(*int_value),
-        Some(ExpressionEvalResult::SingleResult(single_value)) => Some(*single_value as i16),
-        Some(ExpressionEvalResult::DoubleResult(double_value)) =>  Some(*double_value as i16),
-        _ => None
+        Some(ExpressionEvalResult::IntegerResult(int_value)) =>  Ok(*int_value),
+        Some(ExpressionEvalResult::SingleResult(single_value)) => Ok(*single_value as i16),
+        Some(ExpressionEvalResult::DoubleResult(double_value)) =>  Ok(*double_value as i16),
+        _ => Err("Type mismatch".to_string())
     }
 }
 

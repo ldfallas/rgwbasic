@@ -1,6 +1,7 @@
 use crate::eval::GwExpression;
 use crate::eval::EvaluationContext;
 use crate::eval::ExpressionEvalResult;
+use crate::eval::EvaluationError;
 
 
 pub enum GwBinaryOperationKind {
@@ -411,10 +412,18 @@ impl GwBinaryOperation {
 
 
 impl GwExpression for GwBinaryOperation {
-    fn eval (&self, context : &mut EvaluationContext) -> ExpressionEvalResult {
-        let left_result = self.left.eval(context);
-        let right_result = self.right.eval(context);
-        self.evaluator.evaluate(&left_result, &right_result).unwrap()
+    fn eval (&self, context : &mut EvaluationContext) 
+                      -> Result<ExpressionEvalResult, EvaluationError> {
+        match (self.left.eval(context), self.right.eval(context)) {
+            (Ok(left_result), Ok(right_result)) => {
+               match self.evaluator.evaluate(&left_result, &right_result) {
+                   Ok(result) => Ok(result),
+                   Err(err) => Err(err.to_string())
+               }
+            }
+            _ => Err("Error on binary operation".to_string())
+
+        }
     }
     fn fill_structure_string(&self,   val : &mut String) {
         val.push_str("(");

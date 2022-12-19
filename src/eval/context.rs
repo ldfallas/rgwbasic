@@ -8,11 +8,8 @@ use std::io::prelude::*;
 
 use std::io::BufReader;
 
-pub enum GwVariableType {
-    Double,
-    Integer,
-    String
-}
+use super::GwExpression;
+
 
 pub enum LineExecutionArgument {
     Empty,
@@ -60,11 +57,12 @@ pub enum ExpressionType {
 }
 
 
-fn get_default_value_for_type(var_type : &GwVariableType) -> ExpressionEvalResult {
+fn get_default_value_for_type(var_type : &ExpressionType) -> ExpressionEvalResult {
     match var_type {
-        GwVariableType::String => ExpressionEvalResult::StringResult(String::from("")),
-        GwVariableType::Integer => ExpressionEvalResult::IntegerResult(0),
-        GwVariableType::Double => ExpressionEvalResult::DoubleResult(0.0)
+        ExpressionType::String => ExpressionEvalResult::StringResult(String::from("")),
+        ExpressionType::Integer => ExpressionEvalResult::IntegerResult(0),
+        ExpressionType::Single => ExpressionEvalResult::SingleResult(0.0),
+        ExpressionType::Double => ExpressionEvalResult::DoubleResult(0.0)
     }
 }
 
@@ -89,7 +87,7 @@ pub trait Console {
     fn clear_screen(&mut self);
     fn current_text_column(&self) -> usize;
     fn adjust_to_position(&mut self, position: usize) {
-        let mut num_spaces = 0;
+        let num_spaces: usize;
         let cur_column = self.current_text_column();
         if cur_column <= position {
             num_spaces = position - cur_column;
@@ -99,7 +97,7 @@ pub trait Console {
         }
        for _ in 1..num_spaces {
             self.print(" ");
-        }            
+        }
     }
     fn flush(&self);
 }
@@ -111,7 +109,7 @@ pub struct DefaultConsole {
 impl DefaultConsole {
     pub fn new() -> DefaultConsole {
         DefaultConsole {  column_position: 0 }
-    }    
+    }
 }
 
 impl Console for DefaultConsole {
@@ -119,7 +117,7 @@ impl Console for DefaultConsole {
         print!("{}", value);
         self.column_position += value.len();
     }
-    
+
     fn print_line(&mut self, value: &str) {
         println!("{}", value);
         self.column_position = 0;
@@ -176,7 +174,10 @@ impl EvaluationContext<'_>  {
         }
     }
 
-    pub fn set_array_entry(&mut self, name : &str, indices : Vec<u16>, new_value : &ExpressionEvalResult) {
+    pub fn set_array_entry(&mut self,
+                           name : &str,
+                           indices : Vec<usize>,
+                           new_value : &ExpressionEvalResult) {
         if let Some(mut_array) = self.array_variables.get_mut(name) {
             mut_array.set_value(&indices, &new_value);
         } else {
@@ -184,8 +185,8 @@ impl EvaluationContext<'_>  {
         }
     }
 
-    pub fn declare_array(&mut self, name : &str, size : u16) {
-        let new_array = GwArray::new_one_dimension(size, GwVariableType::Double);
+    pub fn declare_array(&mut self, name : &str, size : usize) {
+        let new_array = GwArray::new_one_dimension(size, ExpressionType::Double);
         self.array_variables.insert(String::from(name), new_array);
     }
 
@@ -227,11 +228,12 @@ impl EvaluationContext<'_>  {
         }
     }
 
-    pub fn get_variable_type(&self, name : &String) -> Option<GwVariableType> {
+    pub fn get_variable_type(&self, name : &String) -> Option<ExpressionType> {
         match self.lookup_variable(name) {
-            Some(ExpressionEvalResult::StringResult(_)) => Some(GwVariableType::String),
-            Some(ExpressionEvalResult::IntegerResult(_)) => Some(GwVariableType::Integer),
-            Some(ExpressionEvalResult::DoubleResult(_)) => Some(GwVariableType::Double),
+            Some(ExpressionEvalResult::StringResult(_)) => Some(ExpressionType::String),
+            Some(ExpressionEvalResult::IntegerResult(_)) => Some(ExpressionType::Integer),
+            Some(ExpressionEvalResult::SingleResult(_)) => Some(ExpressionType::Single),
+            Some(ExpressionEvalResult::DoubleResult(_)) => Some(ExpressionType::Double),
             _ => None
         }
     }
@@ -302,15 +304,26 @@ fn coerce_value_type(from: &ExpressionEvalResult, to: &ExpressionEvalResult)
 }
 
 
+pub fn evaluate_to_usize(expr: &Box<dyn GwExpression>,
+                         context: &mut EvaluationContext) -> Result<usize, String> {
+    match expr.eval(context) {
+        Ok(ExpressionEvalResult::IntegerResult(ival)) if ival >= 0 => Ok(ival as usize),
+        Ok(ExpressionEvalResult::SingleResult(sval)) if sval >= 0.0 => Ok(sval as usize),
+        Ok(ExpressionEvalResult::DoubleResult(dval)) if dval >= 0.0 => Ok(dval as usize),
+        Err(eval_error) => Err(eval_error),
+        _ => Err("Type mismatch".to_string())
+    }
+}
+
 
 pub struct GwArray {
     values : Vec<ExpressionEvalResult>,
 //    element_type : GwVariableType,
-    dimensions: Vec<u16>
+    dimensions: Vec<usize>
 }
 
 impl GwArray {
-    fn new_one_dimension(size : u16, array_type : GwVariableType)
+    fn new_one_dimension(size : usize, array_type : ExpressionType)
                          -> GwArray{
         let mut values = Vec::with_capacity(usize::from(size));
         for _i in 0..size{
@@ -324,21 +337,23 @@ impl GwArray {
         }
     }
 
-    pub fn get_value(&self, index_array : Vec<u16>) -> ExpressionEvalResult {
-        let mut index : u16 = 0;
+    pub fn get_value(&self, index_array : Vec<usize>) -> ExpressionEvalResult {
+        let mut index : usize = 0;
         for i in 1..self.dimensions.len() {
-            index = (index_array[i] as u16) * self.dimensions[i];
+            index = (index_array[i] as usize) * self.dimensions[i];
         }
-        index = index + (index_array[index_array.len() - 1] as u16);
+        let final_index = index_array[index_array.len() - 1];
+        index = index + ((final_index - 1) as usize);
         self.values[usize::from(index)].clone()
     }
 
-    pub fn set_value(&mut self, index_array : &Vec<u16>, new_value : &ExpressionEvalResult) {
-        let mut index : u16 = 0;
+    pub fn set_value(&mut self, index_array : &Vec<usize>, new_value : &ExpressionEvalResult) {
+        let mut index : usize = 0;
         for i in 1..self.dimensions.len() {
-            index = (index_array[i] as u16) * self.dimensions[i];
+            index = (index_array[i] as usize) * self.dimensions[i];
         }
-        index = index + (index_array[index_array.len() - 1] as u16);
+        let final_index = index_array[index_array.len() - 1];
+        index = index + ((final_index - 1) as usize);
         self.values[usize::from(index)] = new_value.clone();
     }
 }
@@ -399,7 +414,7 @@ impl GwProgram {
                 }
             }
 
-        
+
         let mut context = EvaluationContext {
             array_variables: HashMap::new(),
             variables: HashMap::new(),
@@ -441,7 +456,7 @@ impl GwProgram {
         self.lines.push(new_line);
     }
 
-    pub fn eval(&self, context : &mut EvaluationContext) {
+    pub fn eval(&self, context: &mut EvaluationContext) {
         let mut current_index = 0;
         let mut arg = LineExecutionArgument::Empty;
         loop {
@@ -475,6 +490,47 @@ impl GwProgram {
                     break;
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod context_tests {
+    use super::*;
+    use crate::eval::eval_tests::empty_context;
+
+    #[test]
+    fn it_declares_valid_array() -> Result<(), & 'static str> {
+        let mut ctx = empty_context();
+        ctx.declare_array("my_array", 3);
+
+        ctx.set_array_entry(
+            "my_array",
+            vec![1],
+            &ExpressionEvalResult::IntegerResult(10));
+        ctx.set_array_entry(
+            "my_array",
+            vec![2],
+            &ExpressionEvalResult::IntegerResult(20));
+        ctx.set_array_entry(
+            "my_array",
+            vec![3],
+            &ExpressionEvalResult::IntegerResult(30));
+
+        if let Some(array) = ctx.get_existing_array("my_array") {
+            let existing_values =
+                (array.get_value(vec![1]),
+                 array.get_value(vec![2]),
+                 array.get_value(vec![3]));
+            match existing_values {
+                (ExpressionEvalResult::IntegerResult(10),
+                 ExpressionEvalResult::IntegerResult(20),
+                 ExpressionEvalResult::IntegerResult(30))
+                    => Ok(()),
+                _ => Err("Values not retrieved")
+            }
+        } else {
+            Err("array not found")
         }
     }
 }

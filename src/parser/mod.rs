@@ -29,7 +29,7 @@ use crate::eval::GwArrayAssign;
 use crate::eval::GwCall;
 use crate::eval::while_instr::{GwWhile, GwWend};
 use crate::eval::for_instr::{GwFor, GwNext};
-use crate::eval::dim_instr::GwDim;
+use crate::eval::dim_instr::{ GwDim, GwDimDecl };
 use crate::eval::def_instr::{GwDefType, DefVarRange};
 use crate::eval::{GwAbs, GwLog, GwInt};
 use crate::eval::ProgramLine;
@@ -104,23 +104,6 @@ fn recognize_specific_char<'a>(iterator : &mut PushbackCharsIterator<'a>, c : ch
         false
     }
 }
-
-fn recognize_two_char_op<'a>(iterator : &mut PushbackCharsIterator<'a>,
-                             c1: char,
-                             c2: char) -> bool {
-    if recognize_specific_char(iterator, c1) {
-        if recognize_specific_char(iterator, c2) {
-            true
-        } else {
-            iterator.push_back(c1);
-            false
-        }
-    } else {
-        false
-    }
-
-}
-
 
 fn recognize_eol<'a>(iterator : &mut PushbackCharsIterator<'a>) -> bool {
     if let Some(next_char) = iterator.next()  {
@@ -927,6 +910,34 @@ fn parse_while_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
 
 fn parse_dim_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
                       -> ParserResult<Box<dyn GwInstruction>> {
+    let array_decls = parse_with_separator(
+        iterator,
+        parse_dim_decl,
+        tokens::GwBasicToken::CommaSeparatorTok);
+    match array_decls {
+        ParserResult::Success(mut decls) => {
+                if decls.len() > 0 {
+                    if decls.len() > 1 {
+                        let first = decls.remove(0);
+                        ParserResult::Success(
+                            Box::new(
+                                GwDim::new(first, Some(decls))))
+                    } else {
+                        ParserResult::Success(
+                            Box::new(
+                                GwDim::new(decls.remove(0), None)))
+                    }
+                } else {
+                    ParserResult::Error("DIM requires at least one declaration".to_string())
+                }
+        }
+        ParserResult::Error(err) => ParserResult::Error(err),
+        ParserResult::Nothing => ParserResult::Error("Dimensions required".to_string())
+    }
+}
+
+fn parse_dim_decl<'a>(iterator: &mut PushbackTokensIterator<'a>)
+                      -> ParserResult<GwDimDecl> {
     parse_seq![
         iterator,
         {
@@ -940,12 +951,10 @@ fn parse_dim_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
         },
         {
             ParserResult::Success(
-                Box::new(
-                    GwDim::new(name, dimensions)
-                )
+                GwDimDecl::new(name, dimensions)
             )
         }
-    ]
+    ]    
 }
 
 fn parse_for_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)

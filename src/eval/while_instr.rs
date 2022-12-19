@@ -31,10 +31,10 @@ impl GwInstruction for GwWhile {
         // Evaluate the condition and move the following line
         let condition_evaluation = self.condition.eval(context);
         match condition_evaluation {
-            ExpressionEvalResult::IntegerResult(result) if result == 0 => {
+            Ok(ExpressionEvalResult::IntegerResult(result)) if result == 0 => {
                 InstructionResult::EvaluateLine(wend_line + 1)
             }
-            ExpressionEvalResult::IntegerResult(_) => {
+            Ok(ExpressionEvalResult::IntegerResult(_)) => {
                 InstructionResult::EvaluateNext
             }       
             _ => {
@@ -106,9 +106,10 @@ mod while_eval_tests {
             condition: Box::new(GwVariableExpression { name: String::from("x") })
         };
 
-        ctxt.set_variable(
+        let assign_result = ctxt.set_variable(
             &String::from("x"),
             &ExpressionEvalResult::IntegerResult(1));
+        assert!(if let Ok(_) = assign_result { true } else { false} );
         let evaluation_result = w.eval(0, LineExecutionArgument::Empty, &mut ctxt);
 
         assert!(
@@ -134,9 +135,11 @@ mod while_eval_tests {
             &wend
         ]);
 
-        ctxt.set_variable(
-            &String::from("x"),
-            &ExpressionEvalResult::IntegerResult(0));
+        let assign_result =
+            ctxt.set_variable(
+                &String::from("x"),
+                &ExpressionEvalResult::IntegerResult(0));
+        assert!(if let Ok(_) = assign_result { true } else { false } );
         let evaluation_result = abox.eval(0, LineExecutionArgument::Empty, &mut ctxt);
 
         assert!(

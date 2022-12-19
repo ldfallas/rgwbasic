@@ -1,20 +1,58 @@
-
-use super::{EvaluationContext, ExpressionEvalResult,
+use super::{EvaluationContext, 
             GwInstruction, GwExpression,
+            evaluate_to_usize,
             InstructionResult,
             LineExecutionArgument};
 use std::result::Result;
 
-pub struct GwDim {
+pub struct GwDimDecl {
     name: String,
     dimensions: Vec<Box<dyn GwExpression>>
 }
 
-impl GwDim {
-    pub fn new(name: String, dimensions: Vec<Box<dyn GwExpression>>) -> GwDim {
-        GwDim {
+impl GwDimDecl {
+    pub fn new(name: String, dimensions: Vec<Box<dyn GwExpression>>) -> GwDimDecl {
+        GwDimDecl {
             name,
-            dimensions
+            dimensions,
+        }
+    }
+    fn perform_declaration(&self, context : &mut EvaluationContext) -> Result<(), String> {
+
+        match evaluate_sequence_of_integers(&self.dimensions, context) {
+            Ok(dimensions_to_use) if dimensions_to_use.len() > 0 => {
+                context.declare_array(
+                            &self.name,
+                            *dimensions_to_use.get(0).unwrap() as usize);
+                Ok(())
+            }
+            Ok(_) => Err("Dimensions are required".to_string()),
+            Err(e) => Err(e)
+        }
+    }
+
+    pub fn fill_structure_string(&self, buffer: &mut String) {
+        buffer.push_str(&self.name);
+        buffer.push_str("(");
+        append_to_string_with_separator(buffer,
+                                        &self.dimensions,
+                                         ",");
+        buffer.push_str(")");
+        
+    }
+}
+
+pub struct GwDim {
+    declaration: GwDimDecl,
+    rest: Option<Vec<GwDimDecl>>
+}
+
+impl GwDim {
+    pub fn new(declaration: GwDimDecl,
+               rest: Option<Vec<GwDimDecl>>) -> GwDim {
+        GwDim {
+            declaration,
+            rest
         }
     }
 }
@@ -24,26 +62,33 @@ impl GwInstruction for GwDim {
              _line: i16,
              _arg: LineExecutionArgument,
             context : &mut EvaluationContext) -> InstructionResult {
-
-        match evaluate_sequence_of_integers(&self.dimensions, context) {
-            Ok(dimensions_to_use) if dimensions_to_use.len() > 0 => {
-                context.declare_array(&self.name, *dimensions_to_use.get(0).unwrap());
-                InstructionResult::EvaluateNext
-            }
-            Ok(_) => { return InstructionResult::EvaluateToError("Dimensions are required".to_string())}
-            Err(e) => { return InstructionResult::EvaluateToError(e) }
+        if let Err(e) = self.declaration.perform_declaration(context) {
+            return InstructionResult::EvaluateToError(e);
         }
+        if let Some(other_declarations) = &self.rest {
+            for other_dim in other_declarations {
+                if let Err(e) = other_dim.perform_declaration(context) {
+                    return InstructionResult::EvaluateToError(e);
+                }
+            }
+        }
+        
+        InstructionResult::EvaluateNext
+        // match evaluate_sequence_of_integers(&self.dimensions, context) {
+        //     Ok(dimensions_to_use) if dimensions_to_use.len() > 0 => {
+        //         context.declare_array(&self.name, *dimensions_to_use.get(0).unwrap());
+        //         InstructionResult::EvaluateNext
+        //     }
+        //     Ok(_) => { return InstructionResult::EvaluateToError("Dimensions are required".to_string())}
+        //     Err(e) => { return InstructionResult::EvaluateToError(e) }
+        // }
 
     }
     fn fill_structure_string(&self, buffer: &mut String) {
         buffer.push_str("(DIM ");
-        buffer.push_str(&self.name);
-        buffer.push_str("(");
-        append_to_string_with_separator(buffer,
-                                        &self.dimensions,
-                                        ",");
-        buffer.push_str(")");
-        
+
+        self.declaration.fill_structure_string(buffer);
+
     }
 }
 
@@ -67,9 +112,9 @@ fn evaluate_sequence_of_integers(exprs: &Vec<Box<dyn GwExpression>>,
 
     let mut result = Vec::with_capacity(exprs.len());
     for expr in exprs {
-        match expr.eval(context) {
-            ExpressionEvalResult::IntegerResult(int_result) if int_result > 0 =>  {
-                result.push(int_result as u16);
+        match evaluate_to_usize(expr, context) {
+            Ok(usize_val) => {
+                result.push(usize_val as u16);
             }
             _ => {
                 return Err(String::from("Invalid dimension"));
@@ -88,8 +133,11 @@ mod dim_tests {
 
     #[test]
     fn it_declares_array_with_dim() -> Result<(), String> {
-        let dim = GwDim::new("arr".to_string(),
-                             vec![Box::new(GwIntegerLiteral::with_value(2))]);
+        let dim = GwDim::new(
+                     GwDimDecl::new(
+                         "arr".to_string(),
+                         vec![Box::new(GwIntegerLiteral::with_value(2))]),
+                    None);
 
         let mut context = eval_tests::empty_context();
 

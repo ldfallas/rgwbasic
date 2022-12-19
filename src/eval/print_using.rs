@@ -5,7 +5,6 @@ use super::{
     InstructionResult,
     GwInstruction,
     LineExecutionArgument,
-    GwExpression,
     PrintSeparator,
     PrintElementWrapper
 };
@@ -26,18 +25,18 @@ impl GwPrintUsingStat {
                         tmp_format = rest;
                     }
                     PrintUsingFormatFragment::Numeric { dollar, digits, comma, decimals, rest} => {
-                        tmp_format = rest;
-                        let mut value_to_use = 0 as f64;
+                        //tmp_format = rest;
+                        let  value_to_use: f64;
                         if let Some((PrintElementWrapper::Expr(arg), _)) = self.expressions.get(arg_i) {
                             match arg.eval(context) {
-                                ExpressionEvalResult::DoubleResult(dbl) => {
+                                Ok(ExpressionEvalResult::DoubleResult(dbl)) => {
                                     value_to_use  = dbl;
                                 }
-                                ExpressionEvalResult::SingleResult(dbl) => {
+                                Ok(ExpressionEvalResult::SingleResult(dbl)) => {
                                     value_to_use  = dbl as f64;
                                 }
 
-                                ExpressionEvalResult::IntegerResult(ival) => {
+                                Ok(ExpressionEvalResult::IntegerResult(ival)) => {
                                     value_to_use  = ival as f64;
                                 }
                                 _ => {
@@ -85,8 +84,8 @@ impl GwInstruction for GwPrintUsingStat {
              _arg: LineExecutionArgument,
              context: &mut EvaluationContext) -> InstructionResult {
         if let Some((PrintElementWrapper::Expr(expr), _)) = self.expressions.get(0) {
-            if let ExpressionEvalResult::StringResult( a_atr) = expr.eval(context) {
-                let mut format_string = &a_atr.as_str();
+            if let Ok(ExpressionEvalResult::StringResult(a_atr)) = expr.eval(context) {
+                let format_string = &a_atr.as_str();
                 return self.print_formatted_string(format_string, context);
             }
             else {
@@ -109,7 +108,7 @@ pub fn format_number(
     comma: bool,
     decimals: i8,
     target: &mut String) {
-    let mut i = 0;
+//    let mut i = 0;
     let mut tmp = (value as i32).abs();
     target.clear();
     if decimals > 0 {
@@ -121,10 +120,10 @@ pub fn format_number(
             target.push(char::from_digit(digit , 10).unwrap());
             start /= 10;
             idec -= 1;
-            i += 1;
+          //  i += 1;
         }
         target.push('.');
-        i += 1;
+        //i += 1;
     }
     let mut idigits = digits;
     let mut i = 0;
@@ -265,7 +264,7 @@ mod print_using_tests {
             } = result {
             assert_eq!("", rest);
             result = tok_format_string(rest);
-            if let PrintUsingFormatFragment::End(last) = result {
+            if let PrintUsingFormatFragment::End(_) = result {
                 Ok(())
             } else {
                 Err("Format not recognized")
