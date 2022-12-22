@@ -3,6 +3,7 @@ pub mod tokens;
 pub mod parser;
 use std::io::{self, BufRead};
 
+
 fn read_stdin_line(line : &mut String) -> bool {
     let stdin = io::stdin();
     let mut handle = stdin.lock();
@@ -23,7 +24,7 @@ fn main() -> io::Result<()> {
     let mut uline = String::new();
     let mut success = read_stdin_line(&mut uline);
     while success {
-        if uline.len() > 0 && uline.chars().nth(0).unwrap().is_digit(10) {
+        if !uline.is_empty() && uline.chars().next().unwrap().is_ascii_digit() {
             match parser::parse_instruction_line_from_string(uline) {
                 parser::ParserResult::Success(parsed_line) => program.add_line(parsed_line),
                 parser::ParserResult::Error(error) => println!("Error: {}", error),

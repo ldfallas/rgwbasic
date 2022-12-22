@@ -207,7 +207,7 @@ impl EvaluationContext<'_>  {
         }
     }
 
-    pub fn lookup_variable(&self, name : &String) -> Option<&ExpressionEvalResult> {
+    pub fn lookup_variable(&self, name : &str) -> Option<&ExpressionEvalResult> {
         self.variables.get(name)
     }
 

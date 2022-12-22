@@ -6,6 +6,10 @@ pub mod for_instr;
 pub mod print_using;
 pub mod while_instr;
 
+#[macro_use]
+pub mod utils;
+pub mod swap_instr;
+
 //use std::fs::File;
 //use std::io::BufReader;
 use std::io;

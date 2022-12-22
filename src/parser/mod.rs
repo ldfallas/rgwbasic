@@ -31,6 +31,7 @@ use crate::eval::while_instr::{GwWhile, GwWend};
 use crate::eval::for_instr::{GwFor, GwNext};
 use crate::eval::dim_instr::{ GwDim, GwDimDecl };
 use crate::eval::def_instr::{GwDefType, DefVarRange};
+use crate::eval::swap_instr::{ GwSwap };
 use crate::eval::{GwAbs, GwLog, GwInt};
 use crate::eval::ProgramLine;
 use crate::eval::GwRem;
@@ -188,38 +189,6 @@ fn recognize_string_literal<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Op
     None
 }
 
-#[cfg(test)]
-fn recognize_int_number_str<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Option<i16> {
-    if let Some(c) = iterator.next()  {
-        if c.is_digit(10) {
-            let mut tmp_string = String::new();
-            tmp_string.push(c);
-            loop {
-                if let Some(c) = iterator.next() {
-                    if c.is_digit(10) {
-                        tmp_string.push(c);
-                    } else {
-                        iterator.push_back(c);
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
-            if let Ok(result) = i16::from_str_radix(&tmp_string.to_string(), 10) {
-                Some(result)
-            } else {
-                None
-            }
-        } else {
-            iterator.push_back(c);
-            None
-        }
-    } else {
-        None
-    }
-}
-
 
 ///
 ///  cases for single 45.32, -1.09E-03,22.5!
@@ -259,8 +228,25 @@ fn recognize_float_number_str<'a>(iterator : &mut PushbackCharsIterator<'a>) -> 
                         tmp_string.push(c);
                         has_dot = true;
                     } else {
-                        iterator.push_back(c);
-                        break;
+                        if c == 'e' || c == 'E' {
+                            if !has_dot {
+                                has_dot = true;
+                                tmp_string.push('.');
+                                tmp_string.push('0');
+                            }
+                            tmp_string.push(c);
+                            if let Some(chr) = iterator.next() {
+                                if chr == '-' {
+                                    tmp_string.push(chr);
+                                } else {
+                                    iterator.push_back(chr);
+                                }
+                            }
+                        } else {
+                            iterator.push_back(c);
+                            break;
+                        }
+
                     }
                 } else {
                     break;
@@ -342,7 +328,7 @@ impl<'a> PushbackTokensIterator<'a> {
             if recognize_specific_char(&mut self.chars_iterator, '>') {
                 return Some(GwToken::Keyword(tokens::GwBasicToken::DifferentTok));
             } else if recognize_specific_char(&mut self.chars_iterator, '=') {
-                return Some(GwToken::Keyword(tokens::GwBasicToken::LteTok));                
+                return Some(GwToken::Keyword(tokens::GwBasicToken::LteTok));
             } else  {
                 return Some(GwToken::Keyword(tokens::GwBasicToken::LtTok));
             }
@@ -474,6 +460,7 @@ fn parse_restrict_identifier_expression(iterator : &mut PushbackTokensIterator)
 	    },
             IdExpressionResult::Builtin(_) => { result = ParserResult::Error(String::from("Cannot assign to builtin function")) },
             IdExpressionResult::Error(err) => { result = err;}
+
         }
 
     }
@@ -647,7 +634,7 @@ fn get_operation_kind_from_token(token : &tokens::GwBasicToken)
         tokens::GwBasicToken::LtTok => Some(GwBinaryOperationKind::LessThan),
         tokens::GwBasicToken::GtTok => Some(GwBinaryOperationKind::GreaterThan),
         tokens::GwBasicToken::LteTok => Some(GwBinaryOperationKind::LessEqualThan),
-        tokens::GwBasicToken::GteTok => Some(GwBinaryOperationKind::GreaterEqualThan),        
+        tokens::GwBasicToken::GteTok => Some(GwBinaryOperationKind::GreaterEqualThan),
         _ => None
     }
 }
@@ -907,6 +894,25 @@ fn parse_while_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
     ]
 }
 
+fn parse_swap_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
+                       -> ParserResult<Box<dyn GwInstruction>> {
+    parse_seq![
+        iterator,
+        {
+            parse_success(left, parse_restrict_identifier_expression(iterator));
+            token(GwToken::Keyword(tokens::GwBasicToken::CommaSeparatorTok),
+                  "Expecting left parenthesis");
+            parse_success(right, parse_restrict_identifier_expression(iterator));
+        },
+        {
+            return ParserResult::Success(
+                Box::new(
+                    GwSwap::new(
+                        left,
+                        right)))
+        }
+    ];
+}
 
 fn parse_dim_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
                       -> ParserResult<Box<dyn GwInstruction>> {
@@ -954,7 +960,7 @@ fn parse_dim_decl<'a>(iterator: &mut PushbackTokensIterator<'a>)
                 GwDimDecl::new(name, dimensions)
             )
         }
-    ]    
+    ]
 }
 
 fn parse_for_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
@@ -1223,9 +1229,9 @@ fn parse_optional_tab<'a>(iterator : &mut PushbackTokensIterator<'a>)
             ]
         } else {
             iterator.push_back(next_token);
-        }        
+        }
     }
-    return ParserResult::Nothing;        
+    return ParserResult::Nothing;
 }
 
 //
@@ -1325,7 +1331,7 @@ fn parse_goto_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
     if let Some(GwToken::Integer(line)) = iterator.next() {
         return ParserResult::Success(Box::new(
             GwGotoStat {
-                line: line
+                line
             }
         ));
     } else {
@@ -1415,6 +1421,7 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
 	    GwToken::Keyword(tokens::GwBasicToken::WendTok) => parse_wend_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::ForTok) => parse_for_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::DimTok) => parse_dim_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::SwapTok) => parse_swap_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::NextTok) => parse_next_stat(iterator),
 
             GwToken::Identifier(var_name) => parse_assignment(iterator, var_name),
@@ -1518,7 +1525,7 @@ pub fn parse_instruction_line<'a>(iterator : &mut PushbackTokensIterator<'a>)
                     );
                  },
                  ParserResult::Error(err) =>
-                       ParserResult::Error(String::from(err))
+                       ParserResult::Error(err)
                 }
             } else {
                 if let ParserResult::Error(msg) = parse_result {
@@ -1676,7 +1683,7 @@ mod parser_tests {
             }
             _ => Err("'Greater-than-equal' not parsed")
         }
-    }    
+    }
 
 
     #[test]
@@ -2098,10 +2105,25 @@ mod parser_tests {
 	    ParserResult::Success(instr) => {
 		let mut buf = String::new();
 		instr.fill_structure_string(&mut buf);
-		println!("{}", buf);
 		assert_eq!(buf, "(10 WHILE (X = 1))");
 	    }
 	    _ => panic!("WHILE not parsed!")
+	}
+    }
+
+        #[test]
+    fn it_parses_swap_stat() -> Result<(), & 'static str> {
+	let str = "10 SWAP X,Y";
+	let pb = PushbackCharsIterator::new(str.chars());
+	let mut tokens_iterator = PushbackTokensIterator::create(pb);
+	match parse_instruction_line(&mut tokens_iterator) {
+	    ParserResult::Success(instr) => {
+		let mut buf = String::new();
+		instr.fill_structure_string(&mut buf);
+		assert_eq!(buf, "(10 SWAP X, Y)");
+                Ok(())
+	    }
+	    _ => Err("SWAP not parsed!")
 	}
     }
 
@@ -2147,13 +2169,46 @@ mod parser_tests {
             pushed_back: None
         };
 
-        match (recognize_int_number_str(&mut pb),
+        match (recognize_float_number_str(&mut pb),
                consume_whitespace(&mut pb),
-               recognize_int_number_str(&mut pb),
+               recognize_float_number_str(&mut pb),
                consume_whitespace(&mut pb),
-               recognize_int_number_str(&mut pb)) {
-            (Some(10), _, Some(20), _, Some(30)) => assert!(true),
+               recognize_float_number_str(&mut pb)) {
+            (Some(GwToken::Integer(10)),
+             _,
+             Some(GwToken::Integer(20)),
+             _,
+             Some(GwToken::Integer(30))) => assert!(true),
             _ => assert!(false)
+        }
+    }
+
+    #[test]
+    fn it_identifies_float_numbers()-> Result<(), String> {
+        let str = "10.1 .2 3.2e-1";
+        let mut pb = PushbackCharsIterator {
+            chars: str.chars(),
+            pushed_back: None
+        };
+
+        match (recognize_float_number_str(&mut pb),
+               consume_whitespace(&mut pb),
+               recognize_float_number_str(&mut pb),
+               consume_whitespace(&mut pb),
+               recognize_float_number_str(&mut pb)) {
+            (Some(GwToken::Double(d1)),
+             _,
+             Some(GwToken::Double(d2)),
+             _,
+             Some(GwToken::Double(d3))) => {
+                assert_eq!(10.1, d1);
+                assert_eq!(0.2, d2);
+                assert_eq!(0.32, d3);
+                Ok(())
+            },
+            t => {
+                Err(format!("{:?}", t))
+            }
         }
     }
 
