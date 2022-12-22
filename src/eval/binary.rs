@@ -186,6 +186,11 @@ impl BinaryOperationEvaluator for DifferentEvaluator {
             0.0
         }
     }
+
+    fn perform_string_operation(&self, left: &String, right: &String)
+                                -> Result<ExpressionEvalResult, &'static str> {
+        Ok(ExpressionEvalResult::IntegerResult(bool_to_basic_value(left.cmp(right).is_ne())))
+    }
 }
 
 struct LessThanEvaluator {

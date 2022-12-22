@@ -353,6 +353,7 @@ impl GwArray {
         for i in 1..self.dimensions.len() {
             index = (index_array[i] as usize) * self.dimensions[i];
         }
+
         let final_index = index_array[index_array.len() - 1];
         index = index + ((final_index - 1) as usize);
         self.values[usize::from(index)] = new_value.clone();

@@ -1,5 +1,6 @@
 
 use crate::eval::GwAssignableExpression;
+use crate::eval::GwInkey;
 use crate::tokens;
 use std::str::Chars;
 use std::str::FromStr;
@@ -32,7 +33,7 @@ use crate::eval::for_instr::{GwFor, GwNext};
 use crate::eval::dim_instr::{ GwDim, GwDimDecl };
 use crate::eval::def_instr::{GwDefType, DefVarRange};
 use crate::eval::swap_instr::{ GwSwap };
-use crate::eval::{GwAbs, GwLog, GwInt};
+use crate::eval::{GwAbs, GwLog, GwInt, GwCos, GwSin};
 use crate::eval::ProgramLine;
 use crate::eval::GwRem;
 use crate::eval::GwParenthesizedExpr;
@@ -143,14 +144,16 @@ fn recognize_eol<'a>(iterator : &mut PushbackCharsIterator<'a>) -> bool {
 
 fn recognize_word<'a>(iterator : &mut PushbackCharsIterator<'a>) -> Option<String> {
     if let Some(next_char) = iterator.next() {
-        if next_char.is_alphabetic() {
+        if next_char.is_alphabetic()  {
             let mut result = String::new();
             result.push(next_char);
             loop {
                 if let Some(next_char) = iterator.next() {
-                    if next_char.is_alphabetic()
-                        || next_char.is_digit(10) {
-                       result.push(next_char);
+                    if next_char.is_alphabetic() || next_char.is_digit(10) {
+                        result.push(next_char);
+                    } else if next_char == '$' {
+                        result.push(next_char);
+                        return Some(result);
                     } else {
                         iterator.push_back(next_char);
                         return Some(result);
@@ -380,6 +383,8 @@ fn is_builtin_function(func_name: &String) -> bool {
         "ABS" => true,
         "LOG" => true,
         "INT" => true,
+        "COS" => true,
+        "SIN" => true,
         _ => false
     }
 }
@@ -390,6 +395,8 @@ fn create_builtin_function(func_name: &String, args: Vec<Box<dyn GwExpression>>)
         "ABS" if mut_args.len() == 1 => Some(Box::new(GwAbs { expr: mut_args.remove(0) })),
         "LOG" if mut_args.len() == 1 => Some(Box::new(GwLog { expr: mut_args.remove(0) })),
         "INT" if mut_args.len() == 1 => Some(Box::new(GwInt { expr: mut_args.remove(0) })),
+        "COS" if mut_args.len() == 1 => Some(Box::new(GwCos { expr: mut_args.remove(0) })),
+        "SIN" if mut_args.len() == 1 => Some(Box::new(GwSin { expr: mut_args.remove(0) })),
         _ => None
     }
 }
@@ -478,10 +485,12 @@ pub fn parse_single_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
             return ParserResult::Success(Box::new(GwDoubleLiteral::with_value(d_val)))
         } else if let GwToken::String(str_val) = next_token {
             return ParserResult::Success(Box::new(GwStringLiteral::with_value(str_val)))
-        } else if let GwToken::Keyword(tokens::GwBasicToken::LparTok) = next_token {
+        } else if let GwToken::Keyword(tokens::GwBasicToken::LparTok) = next_token {            
             return parse_parenthesized_expression(iterator);
         } else if let GwToken::Keyword(tokens::GwBasicToken::MinusTok) = next_token {
             return parse_negation_expression(iterator);
+        } else if let GwToken::Keyword(tokens::GwBasicToken::InkeyDTok) = next_token {
+            return ParserResult::Success(Box::new(GwInkey {}));
         } else {
             iterator.push_back(next_token);
         }

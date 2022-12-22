@@ -242,6 +242,7 @@ impl GwTokenInfo {
         GwTokenInfo::add_token("TO", GwBasicToken::ToTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("USING", GwBasicToken::UsingTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("SWAP", GwBasicToken::SwapTok, &mut dict, &mut dict2);
+        GwTokenInfo::add_token("INKEY$", GwBasicToken::InkeyDTok, &mut dict, &mut dict2);
 
 
         GwTokenInfo::add_token("*", GwBasicToken::TimesTok, &mut dict, &mut dict2);

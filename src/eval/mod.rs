@@ -83,6 +83,21 @@ impl GwExpression for GwParenthesizedAccessExpr {
     }
 }
 
+// AST node for special INKEY$ variable
+pub struct GwInkey {
+}
+
+impl GwExpression for GwInkey {
+    fn eval(&self, _context: &mut EvaluationContext) -> Result<ExpressionEvalResult, EvaluationError> {
+        //TODO implement this!
+        Ok(ExpressionEvalResult::StringResult("".into()))
+    }
+
+    fn fill_structure_string(&self, buffer: &mut String) {
+        buffer.push_str("INKEY$");
+    }
+}
+
 // AST node for elements representing function calls
 pub struct GwCall {
     pub array_or_function: String,
@@ -209,6 +224,67 @@ impl GwExpression for GwLog {
     }
     fn fill_structure_string(&self, buffer: &mut String) {
         buffer.push_str("LOG(");
+        self.expr.fill_structure_string(buffer);
+        buffer.push(')')
+    }
+}
+
+
+pub struct GwSin {
+    pub expr: Box<dyn GwExpression>,
+}
+
+impl GwExpression for GwSin {
+    fn eval(&self, context: &mut EvaluationContext)
+            -> Result<ExpressionEvalResult, EvaluationError> {
+        match self.expr.eval(context) {
+            Ok(ExpressionEvalResult::IntegerResult(value)) => {
+                Ok(ExpressionEvalResult::DoubleResult((value as f64).sin()))
+            }
+            Ok(ExpressionEvalResult::SingleResult(value)) => {
+                Ok(ExpressionEvalResult::SingleResult(value.sin()))
+            }            
+            Ok(ExpressionEvalResult::DoubleResult(value)) => {
+                Ok(ExpressionEvalResult::DoubleResult(value.sin()))
+            }
+            Ok(_) => Err("Type mismatch".to_string()),
+            error@Err(_) => {
+                error
+            }            
+        }
+    }
+    fn fill_structure_string(&self, buffer: &mut String) {
+        buffer.push_str("SIN(");
+        self.expr.fill_structure_string(buffer);
+        buffer.push(')')
+    }
+}
+
+pub struct GwCos {
+    pub expr: Box<dyn GwExpression>,
+}
+
+impl GwExpression for GwCos {
+    fn eval(&self, context: &mut EvaluationContext)
+            -> Result<ExpressionEvalResult, EvaluationError> {
+        match self.expr.eval(context) {
+            Ok(ExpressionEvalResult::IntegerResult(value)) => {
+                Ok(ExpressionEvalResult::DoubleResult((value as f64).cos()))
+            }
+            Ok(ExpressionEvalResult::SingleResult(value)) => {
+                Ok(ExpressionEvalResult::SingleResult(value.cos()))
+            }            
+            Ok(ExpressionEvalResult::DoubleResult(value)) => {
+                Ok(ExpressionEvalResult::DoubleResult(value.cos()))
+            }
+            Ok(_) => Err("Type mismatch".to_string()),
+            error@Err(_) => {
+                error
+            }            
+        }
+    }
+    fn fill_structure_string(&self, buffer: &mut String) {
+        buffer.push_str("COS(");
         self.expr.fill_structure_string(buffer);
         buffer.push(')')
     }
