@@ -45,6 +45,7 @@ pub trait GwInstruction {
 
 
 #[derive(Clone)]
+#[derive(Debug)]
 pub enum ExpressionEvalResult {
     StringResult(String),
     IntegerResult(i16),

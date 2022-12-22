@@ -20,7 +20,7 @@ use crate::eval::print_using::GwPrintUsingStat;
 use crate::eval::GwLoadStat;
 use crate::eval::GwInputStat;
 use crate::eval::GwCls;
-use crate::eval::GwIf;
+use crate::eval::if_instr::{ GwIf, GwIfWithStats };
 use crate::eval::GwKeyStat;
 use crate::eval::GwColor;
 use crate::eval::GwGotoStat;
@@ -1064,12 +1064,22 @@ fn parse_if_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
 
     if let ParserResult::Success(expr) =  parse_expression(iterator) {
         if let Some(GwToken::Keyword(tokens::GwBasicToken::ThenTok)) = iterator.next() {
-            if let Some(GwToken::Integer(line_number)) = iterator.next() {
+            let next_token = iterator.next();
+            if let Some(GwToken::Integer(line_number)) = next_token {
                 return ParserResult::Success(Box::new(
                     GwIf::new(expr, line_number)
                 ));
             } else {
-                return ParserResult::Error(String::from("Expecting line number"));
+                //TODO: REMOVE UNWRAP IN NEXT LINE
+                iterator.push_back(next_token.unwrap());
+                match parse_same_line_instruction_sequence(iterator) {
+                    ParserResult::Success(then_stats) => {
+                        return ParserResult::Success(Box::new(
+                                   GwIfWithStats::new(expr, then_stats)));
+                    }
+                    ParserResult::Error(error) => ParserResult::Error(error),
+                    _ => todo!()
+                }
             }
         } else {
             return ParserResult::Error(String::from("Expecting THEN keyword"));
@@ -1425,7 +1435,11 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
             GwToken::Keyword(tokens::GwBasicToken::NextTok) => parse_next_stat(iterator),
 
             GwToken::Identifier(var_name) => parse_assignment(iterator, var_name),
-            _ => panic!("Not implemented parsing for non-assigment")
+            t => {
+                println!("About to panic: {:?}", t);
+                panic!("Not implemented parsing for non-assigment")
+            }
+
         }
         /*
         if let GwToken::Keyword(tokens::GwBasicToken::GotoTok) = next_tok {
@@ -1469,6 +1483,31 @@ pub fn parse_instruction_line_from_string(line : String)
 
 fn parse_same_line_instruction_sequence<'a>(iterator : &mut PushbackTokensIterator<'a>)
                                             -> ParserResult<Vec<Box<dyn GwInstruction>>> {
+
+    parse_seq![
+        iterator,
+        {
+            parse_success(first, parse_instruction(iterator));
+        },
+        {
+            match continue_parse_same_line_instruction_sequence(iterator) {
+                ParserResult::Success(ref mut rest) => {
+                    let mut result = vec![first];
+                    result.append(rest);
+                    return ParserResult::Success(result);
+                }
+                ParserResult::Nothing => {
+                    return ParserResult::Success(vec![first]);
+                }
+                err@ParserResult::Error(_) => { return err; }
+            }
+
+        }
+    ];
+}
+
+fn continue_parse_same_line_instruction_sequence<'a>(iterator : &mut PushbackTokensIterator<'a>)
+                                            -> ParserResult<Vec<Box<dyn GwInstruction>>> {
     if let Some(next_tok) = iterator.next() {
         if let GwToken::Keyword(tokens::GwBasicToken::ColonSeparatorTok) = next_tok {
             iterator.push_back(next_tok);
@@ -1505,7 +1544,7 @@ pub fn parse_instruction_line<'a>(iterator : &mut PushbackTokensIterator<'a>)
         if let GwToken::Integer(line_number) = next_tok {
             let parse_result = parse_instruction(iterator);
             if let ParserResult::Success(instr) = parse_result {
-                match parse_same_line_instruction_sequence(iterator) {
+                match continue_parse_same_line_instruction_sequence(iterator) {
                  ParserResult::Success(rest_inst) => {
                     return ParserResult::Success(
                         ProgramLine {
@@ -1758,6 +1797,20 @@ mod parser_tests {
             ParserResult::Error(error) => { return Err(error); }
 	    ParserResult::Nothing => { return Err("Nothing".to_string()); }
         }
+    }
+
+    #[test]
+    fn it_parses_if_with_stats() -> Result<(), String>{
+        let result = get_parsed_ast_string("10 IF A>1 THEN PRINT \"a\" : PRINT \"b\"")?;
+        assert_eq!("(10 IF (A > 1) THEN PRINT a; : PRINT b;)" ,result);
+        Ok(())
+    }
+
+    #[test]
+    fn it_parses_if_with_stat() -> Result<(), String>{
+        let result = get_parsed_ast_string("10 IF A>1 THEN PRINT \"a\"")?;
+        assert_eq!("(10 IF (A > 1) THEN PRINT a;)" ,result);
+        Ok(())
     }
 
     #[test]
@@ -2231,6 +2284,23 @@ mod parser_tests {
                    && w3.eq(&String::from("AJLAKJ"))
               => assert!(true),
             _ => assert!(false)
+        }
+    }
+
+    fn get_parsed_ast_string(a_str: &str) -> Result<String, String> {
+        let pb = PushbackCharsIterator {
+            chars: a_str.chars(),
+            pushed_back: None
+        };
+        let mut tokens_iterator = PushbackTokensIterator::create(pb);
+        match parse_instruction_line(&mut tokens_iterator) {
+            ParserResult::Success(instr) => {
+                let mut buf = String::new();
+                instr.fill_structure_string(&mut buf);
+		return Ok(buf);
+            }
+            ParserResult::Error(error) => { return Err(error); }
+	    ParserResult::Nothing => { return Err("Nothing".to_string()); }
         }
     }
 

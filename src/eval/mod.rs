@@ -3,6 +3,7 @@ pub mod context;
 pub mod def_instr;
 pub mod dim_instr;
 pub mod for_instr;
+pub mod if_instr;
 pub mod print_using;
 pub mod while_instr;
 
@@ -515,53 +516,6 @@ impl GwInstruction for GwSystemStat {
     }
 }
 
-pub struct GwIf {
-    condition: Box<dyn GwExpression>,
-    then_line: i16,
-}
-
-impl GwIf {
-    pub fn new(condition: Box<dyn GwExpression>, then_line: i16) -> GwIf {
-        return GwIf {
-            condition,
-            then_line,
-        };
-    }
-}
-
-impl GwInstruction for GwIf {
-    fn eval(
-        &self,
-        _line: i16,
-        _arg: LineExecutionArgument,
-        context: &mut EvaluationContext,
-    ) -> InstructionResult {
-        match self.condition.eval(context) {
-            Ok(ExpressionEvalResult::IntegerResult(i_result)) if i_result == 0 => {
-                InstructionResult::EvaluateNext
-            }
-            Ok(ExpressionEvalResult::SingleResult(s_result)) if s_result == 0.0 => {
-                InstructionResult::EvaluateNext
-            }
-            Ok(ExpressionEvalResult::DoubleResult(d_result)) if d_result == 0.0 => {
-                InstructionResult::EvaluateNext
-            }
-            _ => {
-                if let Some(real_line) = context.get_real_line(self.then_line) {
-                    InstructionResult::EvaluateLine(real_line)
-                } else {
-                    panic!("Jumping to a non-existing line!");
-                }
-            }
-        }
-    }
-
-    fn fill_structure_string(&self, buffer: &mut String) {
-        buffer.push_str(&"IF ");
-        self.condition.fill_structure_string(buffer);
-        buffer.push_str(format!(" {}", self.then_line).as_str());
-    }
-}
 
 pub struct GwRem {
     pub comment: String,
