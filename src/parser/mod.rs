@@ -28,8 +28,9 @@ use crate::eval::GwGotoStat;
 use crate::eval::GwAssign;
 use crate::eval::GwArrayAssign;
 use crate::eval::GwCall;
-use crate::eval::while_instr::{GwWhile, GwWend};
-use crate::eval::for_instr::{GwFor, GwNext};
+use crate::eval::data_instr::{ GwData, GwRead };
+use crate::eval::while_instr::{ GwWhile, GwWend };
+use crate::eval::for_instr::{ GwFor, GwNext };
 use crate::eval::dim_instr::{ GwDim, GwDimDecl };
 use crate::eval::def_instr::{GwDefType, DefVarRange};
 use crate::eval::swap_instr::{ GwSwap };
@@ -280,6 +281,10 @@ impl<'a> PushbackTokensIterator<'a> {
             tokens_info: tokens::GwTokenInfo::create(),
             pushed_back: None
         }
+    }
+
+    pub fn get_internal_iterator(&mut self) -> &mut PushbackCharsIterator<'a> {
+        &mut self.chars_iterator
     }
 
     fn next(&mut self) -> Option<GwToken> {
@@ -903,6 +908,22 @@ fn parse_while_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
     ]
 }
 
+fn parse_read_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
+                       -> ParserResult<Box<dyn GwInstruction>> {
+    parse_seq![
+        iterator,
+        {
+            parse_success(variable_expression, parse_restrict_identifier_expression(iterator));
+        },
+        {
+            return ParserResult::Success(
+                Box::new(
+                    GwRead::new(variable_expression)))
+        }
+    ];
+}
+
+
 fn parse_swap_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
                        -> ParserResult<Box<dyn GwInstruction>> {
     parse_seq![
@@ -922,6 +943,46 @@ fn parse_swap_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
         }
     ];
 }
+
+fn parse_data_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
+                       -> ParserResult<Box<dyn GwInstruction>> {
+    let chars_iterator = iterator.get_internal_iterator();
+    let mut contents:Vec<String> = vec![];
+    let mut done = false;
+    loop {
+        let mut current = String::new();
+        // Consume whitespace
+        loop {
+            let next_char_result = chars_iterator.next();
+            if let Some(' ' | '\t') = next_char_result {
+                continue;
+            } else if let Some(to_restore) = next_char_result {
+                chars_iterator.push_back(to_restore);
+            }
+            break;
+        }
+        loop {
+            if let Some(next_char) = chars_iterator.next() {
+                if next_char == ',' {
+                    contents.push(current);
+                    break;
+                } else {
+                    current.push(next_char);
+                }
+            } else {
+                contents.push(current);
+                done = true;
+                break;
+            }
+        }
+        if done {
+            break;
+        }
+        
+    }
+    ParserResult::Success(Box::new(GwData::new(contents)))
+}
+
 
 fn parse_dim_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
                       -> ParserResult<Box<dyn GwInstruction>> {
@@ -1441,6 +1502,8 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
             GwToken::Keyword(tokens::GwBasicToken::ForTok) => parse_for_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::DimTok) => parse_dim_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::SwapTok) => parse_swap_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::ReadTok) => parse_read_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::DataTok) => parse_data_stat(iterator),            
             GwToken::Keyword(tokens::GwBasicToken::NextTok) => parse_next_stat(iterator),
 
             GwToken::Identifier(var_name) => parse_assignment(iterator, var_name),
@@ -1812,6 +1875,13 @@ mod parser_tests {
     fn it_parses_if_with_stats() -> Result<(), String>{
         let result = get_parsed_ast_string("10 IF A>1 THEN PRINT \"a\" : PRINT \"b\"")?;
         assert_eq!("(10 IF (A > 1) THEN PRINT a; : PRINT b;)" ,result);
+        Ok(())
+    }
+
+    #[test]
+    fn it_parses_simple_data() -> Result<(), String>{
+        let result = get_parsed_ast_string("10 DATA 1.23,343,,45")?;
+        assert_eq!("(10 DATA 1.23, 343, , 45)" ,result);
         Ok(())
     }
 

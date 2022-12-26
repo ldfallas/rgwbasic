@@ -11,6 +11,7 @@ use std::io::BufReader;
 use super::GwExpression;
 
 
+#[derive(Debug)]
 pub enum LineExecutionArgument {
     Empty,
     NextIteration
@@ -22,7 +23,7 @@ pub struct ProgramLine {
     pub rest_instructions : Option<Vec<Box<dyn GwInstruction>>>
 }
 
-
+#[derive(Debug)]
 pub enum InstructionResult {
     EvaluateNext,
     EvaluateLine(i16),
@@ -41,11 +42,13 @@ pub trait GwInstruction {
     fn is_while(&self) -> bool { false }
     fn is_for(&self) -> bool { false }
     fn is_next(&self) -> bool { false }
+    fn get_data(&self) -> Option<&Vec<String>> { None }
 }
 
 
 #[derive(Clone)]
 #[derive(Debug)]
+#[derive(PartialEq)]
 pub enum ExpressionEvalResult {
     StringResult(String),
     IntegerResult(i16),
@@ -145,8 +148,9 @@ pub struct EvaluationContext<'a> {
     pub underlying_program: Option<&'a mut GwProgram>,
     pub pair_instruction_table: HashMap<i16, i16>,
     pub real_lines: Option<Vec<& 'a Box<dyn GwInstruction>>>,
-    pub console: Box<dyn Console>
-//    pub built_in_functions: HashMap<String, GwFunction>
+    pub data: Vec<& 'a String>,
+    pub console: Box<dyn Console>,
+    pub data_position: i32,
 }
 
 
@@ -160,7 +164,9 @@ impl EvaluationContext<'_>  {
             underlying_program: None,
             pair_instruction_table: HashMap::new(),
             real_lines: None,
-            console: Box::new( DefaultConsole::new())
+            data: vec![],
+            console: Box::new( DefaultConsole::new()),
+            data_position: -1
         }
     }
     pub fn with_program(program : &mut GwProgram) -> EvaluationContext {
@@ -171,7 +177,9 @@ impl EvaluationContext<'_>  {
             underlying_program: Some(program),
             pair_instruction_table: HashMap::new(),
             real_lines: None,
-            console: Box::new(DefaultConsole::new())
+            data: vec![],
+            console: Box::new(DefaultConsole::new()),
+            data_position: -1                
         }
     }
 
@@ -236,6 +244,16 @@ impl EvaluationContext<'_>  {
             Some(ExpressionEvalResult::SingleResult(_)) => Some(ExpressionType::Single),
             Some(ExpressionEvalResult::DoubleResult(_)) => Some(ExpressionType::Double),
             _ => None
+        }
+    }
+
+    pub fn get_next_data_item(&mut self) -> Option<&String> {
+        self.data_position += 1;
+
+        if let Some(ref the_value) = self.data.get(self.data_position as usize) {
+            Some(the_value)
+        } else {
+            None
         }
     }
 
@@ -400,21 +418,27 @@ impl GwProgram {
 
     pub fn run(&self) {
 
-        let  real_lines = &mut vec![];
+        let real_lines = &mut vec![];
+        let mut global_data = vec![];
         let mut table = HashMap::new();
         let mut i = 0;
 
         for e in self.lines.iter() {
             table.insert(e.get_line(), i);
             real_lines.push(&e.instruction);
-            i += 1;
-                if let Some(ref rest) = e.rest_instructions {
-                    for nested in rest {
-                        real_lines.push(&nested);
-                        i += 1;
-                    }
+            if let Some(data) = e.instruction.get_data() {
+                for data_item in data {
+                    global_data.push(data_item);
                 }
             }
+            i += 1;
+            if let Some(ref rest) = e.rest_instructions {
+                for nested in rest {
+                    real_lines.push(&nested);
+                    i += 1;
+                }
+            }
+        }
 
 
         let mut context = EvaluationContext {
@@ -424,7 +448,10 @@ impl GwProgram {
             underlying_program: None,
             pair_instruction_table: HashMap::new(),
             real_lines: Some(real_lines.to_vec()),
-            console: Box::new(DefaultConsole::new())
+            console: Box::new(DefaultConsole::new()),
+            data: global_data,
+            data_position: -1
+                
         };
         //      for j in 1..self.lines.len() {
 

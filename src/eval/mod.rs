@@ -10,6 +10,7 @@ pub mod while_instr;
 #[macro_use]
 pub mod utils;
 pub mod swap_instr;
+pub mod data_instr;
 
 //use std::fs::File;
 //use std::io::BufReader;
@@ -1007,6 +1008,8 @@ mod eval_tests {
             pair_instruction_table: HashMap::new(),
             real_lines: Some(vec![&program.lines.get(0).unwrap().instruction]),
             console: Box::new(DefaultConsole::new()),
+            data: vec![],
+            data_position: -1
         };
 
         context
@@ -1129,6 +1132,8 @@ mod eval_tests {
             pair_instruction_table: HashMap::new(),
             real_lines: None,
             console: Box::new(DefaultConsole::new()),
+            data: vec![],
+            data_position: -1
         }
     }
 }
