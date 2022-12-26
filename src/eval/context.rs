@@ -14,7 +14,8 @@ use super::GwExpression;
 #[derive(Debug)]
 pub enum LineExecutionArgument {
     Empty,
-    NextIteration
+    NextIteration,
+    SubReturn
 }
 
 pub struct ProgramLine {
@@ -151,6 +152,7 @@ pub struct EvaluationContext<'a> {
     pub data: Vec<& 'a String>,
     pub console: Box<dyn Console>,
     pub data_position: i32,
+    pub subroutine_stack: Vec<i16>
 }
 
 
@@ -166,7 +168,8 @@ impl EvaluationContext<'_>  {
             real_lines: None,
             data: vec![],
             console: Box::new( DefaultConsole::new()),
-            data_position: -1
+            data_position: -1,
+            subroutine_stack: vec![]
         }
     }
     pub fn with_program(program : &mut GwProgram) -> EvaluationContext {
@@ -179,8 +182,17 @@ impl EvaluationContext<'_>  {
             real_lines: None,
             data: vec![],
             console: Box::new(DefaultConsole::new()),
-            data_position: -1                
+            data_position: -1,
+            subroutine_stack: vec![]
         }
+    }
+
+    pub fn push_return(&mut self, line: i16) {
+        self.subroutine_stack.push(line);
+    }
+
+    pub fn pop_return(&mut self) -> Option<i16> {
+        self.subroutine_stack.pop()
     }
 
     pub fn set_array_entry(&mut self,
@@ -450,7 +462,8 @@ impl GwProgram {
             real_lines: Some(real_lines.to_vec()),
             console: Box::new(DefaultConsole::new()),
             data: global_data,
-            data_position: -1
+            data_position: -1,
+            subroutine_stack: vec![]
                 
         };
         //      for j in 1..self.lines.len() {

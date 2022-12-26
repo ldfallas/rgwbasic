@@ -5,11 +5,11 @@ use super::{ ExpressionType,
              LineExecutionArgument,
              InstructionResult };
 
-// AST element for DATA declaration
-// Example:
-// ```
-//  DATA ABC,123,"adsf"
-// ```
+/// AST element for DATA declaration
+/// Example:
+/// ```
+///  DATA ABC,123,"adsf"
+/// ```
 pub struct GwData {
     // We store strings because data items could be used in different ways
     elements: Vec<String>
@@ -45,7 +45,11 @@ impl GwInstruction for GwData {
     fn get_data(&self) -> Option<&Vec<String>> { Some(&self.elements) }
 }
 
-
+/// AST element for reading DATA elements
+/// Example:
+/// ```
+///  READ X
+/// ```
 pub struct GwRead {
     variable_expr: Box<dyn GwAssignableExpression>
 }
@@ -54,6 +58,32 @@ impl GwRead {
     pub fn new(variable_expr: Box<dyn GwAssignableExpression>) -> GwRead {
         GwRead {
             variable_expr
+        }
+    }
+
+    fn preprocess_numeric_data_item(&self, next_data: &String) -> Option<f64> {
+        let without_suffix = next_data.trim_end_matches(|c| c == '#' || c == '$' || c == '%' || c == ' ');
+        let without_prefix = without_suffix.trim_start();
+        match without_prefix.parse::<f64>() {
+            Ok(v) => Some(v),
+            _ => None
+        }
+    }
+    
+    fn process_numeric_data_item_read<F>(&self,
+                                         f: F,
+                                         value_opt: Option<f64>,
+                                         context: &mut EvaluationContext)
+        -> InstructionResult
+    where F: FnOnce(f64) -> ExpressionEvalResult {
+        if let Some(value) = value_opt {
+            check_result![
+                self.variable_expr.assign_value(
+                    f(value),
+                    context)];
+            InstructionResult::EvaluateNext
+        } else {
+            InstructionResult::EvaluateToError("Type mismatch".into())
         }
     }
 }
@@ -74,9 +104,27 @@ impl GwInstruction for GwRead {
                             context)];
                     InstructionResult::EvaluateNext
                 },
-                ExpressionType::Integer => todo!(),
-                ExpressionType::Single => todo!(),
-                ExpressionType::Double => todo!(),
+                ExpressionType::Integer => {
+                    let value_opt = self.preprocess_numeric_data_item(next_data);
+                    self.process_numeric_data_item_read(
+                        |v| { ExpressionEvalResult::IntegerResult(v as i16) },
+                        value_opt,
+                        context)
+                }
+                ExpressionType::Single => {
+                    let value_opt = self.preprocess_numeric_data_item(next_data);
+                    self.process_numeric_data_item_read(
+                        |v| { ExpressionEvalResult::SingleResult(v as f32) },
+                        value_opt,
+                        context)
+                }
+                ExpressionType::Double => {
+                    let value_opt = self.preprocess_numeric_data_item(next_data);
+                    self.process_numeric_data_item_read(
+                        |v| { ExpressionEvalResult::DoubleResult(v) },
+                        value_opt,
+                        context)
+                }
             }
         } else {
             InstructionResult::EvaluateToError("OUT OF DATA".to_string())

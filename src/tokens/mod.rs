@@ -245,7 +245,8 @@ impl GwTokenInfo {
         GwTokenInfo::add_token("DATA", GwBasicToken::DataTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("INKEY$", GwBasicToken::InkeyDTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("READ", GwBasicToken::ReadTok, &mut dict, &mut dict2);
-
+        GwTokenInfo::add_token("GOSUB", GwBasicToken::GosubTok, &mut dict, &mut dict2);
+        GwTokenInfo::add_token("RETURN", GwBasicToken::ReturnTok, &mut dict, &mut dict2);
 
         GwTokenInfo::add_token("*", GwBasicToken::TimesTok, &mut dict, &mut dict2);
         GwTokenInfo::add_token("/", GwBasicToken::DivTok, &mut dict, &mut dict2);

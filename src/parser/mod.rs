@@ -34,6 +34,7 @@ use crate::eval::for_instr::{ GwFor, GwNext };
 use crate::eval::dim_instr::{ GwDim, GwDimDecl };
 use crate::eval::def_instr::{GwDefType, DefVarRange};
 use crate::eval::swap_instr::{ GwSwap };
+use crate::eval::gosub_instr::{ GwGosub, GwReturn };
 use crate::eval::{GwAbs, GwLog, GwInt, GwCos, GwSin};
 use crate::eval::ProgramLine;
 use crate::eval::GwRem;
@@ -923,6 +924,24 @@ fn parse_read_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
     ];
 }
 
+fn parse_gosub_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
+                        -> ParserResult<Box<dyn GwInstruction>> {
+    parse_seq![
+        iterator,
+        {
+            token(GwToken::Integer(line_number), "Expecting line number");
+        },
+        {
+            return ParserResult::Success(Box::new(GwGosub::new(line_number)));
+        }
+    ];
+}
+
+
+fn parse_return_stat<'a>(_iterator: &mut PushbackTokensIterator<'a>)
+                        -> ParserResult<Box<dyn GwInstruction>> {
+    ParserResult::Success(Box::new(GwReturn::new()))
+}
 
 fn parse_swap_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
                        -> ParserResult<Box<dyn GwInstruction>> {
@@ -1502,6 +1521,8 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
             GwToken::Keyword(tokens::GwBasicToken::ForTok) => parse_for_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::DimTok) => parse_dim_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::SwapTok) => parse_swap_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::GosubTok) => parse_gosub_stat(iterator), 
+            GwToken::Keyword(tokens::GwBasicToken::ReturnTok) => parse_return_stat(iterator), 
             GwToken::Keyword(tokens::GwBasicToken::ReadTok) => parse_read_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::DataTok) => parse_data_stat(iterator),            
             GwToken::Keyword(tokens::GwBasicToken::NextTok) => parse_next_stat(iterator),
@@ -1879,9 +1900,19 @@ mod parser_tests {
     }
 
     #[test]
-    fn it_parses_simple_data() -> Result<(), String>{
+    fn it_parses_simple_data() -> Result<(), String> {
         let result = get_parsed_ast_string("10 DATA 1.23,343,,45")?;
         assert_eq!("(10 DATA 1.23, 343, , 45)" ,result);
+        Ok(())
+    }
+
+    #[test]
+    fn it_parses_read() -> Result<(), String> {
+        let result = get_parsed_ast_string("10 READ x")?;
+        assert_eq!("(10 READ X)" ,result);
+
+        let result_arr = get_parsed_ast_string("10 READ x(1)")?;
+        assert_eq!("(10 READ X(1))" ,result_arr);
         Ok(())
     }
 
