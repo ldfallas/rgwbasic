@@ -1,8 +1,8 @@
-pub mod eval;
-pub mod tokens;
-pub mod parser;
+use rgwbasic::{parser, eval};
 use std::io::{self, BufRead};
+mod defaultconsole;
 
+use defaultconsole::DefaultConsole;
 
 fn read_stdin_line(line : &mut String) -> bool {
     let stdin = io::stdin();
@@ -33,7 +33,7 @@ fn main() -> io::Result<()> {
         } else {
             match parser::parse_repl_instruction_string (uline) {
                 parser::ParserResult::Success(parsed_instr) => {
-                    let mut context = eval::EvaluationContext::with_program(&mut program);
+                    let mut context = eval::EvaluationContext::with_program(&mut program, Box::new(DefaultConsole::new()));
                     parsed_instr.eval(-1, eval::LineExecutionArgument::Empty, &mut context);
                     context.console.flush();
                 }

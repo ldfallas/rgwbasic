@@ -142,9 +142,11 @@ fn get_as_integer(value: &Option<&ExpressionEvalResult>) -> Result<i16, String> 
 mod for_eval_tests {
     use crate::eval::*;
     use crate::eval::for_instr::*;
+    use crate::eval::eval_tests::DummyConsole;
+    
     #[test]
     fn it_iteratates_for_loop() {
-        let mut ctxt = EvaluationContext::new();
+        let mut ctxt = EvaluationContext::new(Box::new(DummyConsole{}));
         let instr = GwFor {
             variable: String::from("x"),
             from: Box::new(GwIntegerLiteral{value: 1}),
@@ -201,27 +203,6 @@ mod for_eval_tests {
                 },
                 _ => false
             });
-
-        // evaluation_result = abox.eval(0,tmp_arg, &mut ctxt);
-
-        // tmp_arg = LineExecutionArgument::Empty;
-        // assert!(
-        //     match evaluation_result {
-        //         InstructionResult::EvaluateNext =>  true,
-        //         _ => false
-        //     });
-
-
-        // evaluation_result = inext.eval(1,tmp_arg, &mut ctxt);
-        // tmp_arg = LineExecutionArgument::Empty;
-        // assert!(
-        //     match evaluation_result {
-        //         InstructionResult::EvaluateLineWithArg(0, tmp_arg2) => {
-        //             tmp_arg = tmp_arg2;
-        //             true
-        //         },
-        //         _ => false
-        //     });
 
         evaluation_result = abox.eval(0,tmp_arg, &mut ctxt);
 

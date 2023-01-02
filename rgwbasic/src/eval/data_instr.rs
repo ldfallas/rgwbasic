@@ -7,7 +7,7 @@ use super::{ ExpressionType,
 
 /// AST element for DATA declaration
 /// Example:
-/// ```
+/// ```basic
 ///  DATA ABC,123,"adsf"
 /// ```
 pub struct GwData {
@@ -47,7 +47,7 @@ impl GwInstruction for GwData {
 
 /// AST element for reading DATA elements
 /// Example:
-/// ```
+/// ```basic
 ///  READ X
 /// ```
 pub struct GwRead {
@@ -141,13 +141,14 @@ impl GwInstruction for GwRead {
 #[cfg(test)]
 mod data_tests {
     use super::*;
+    use crate::eval::eval_tests::DummyConsole;
     use crate::eval::{ ExpressionType, GwVariableExpression };
 
     #[test]
     fn it_reads_number_data() -> Result<(), & 'static str> {
         let string1 = "first".to_string();
         let string2 = "second".to_string();
-        let mut ctx = EvaluationContext::new();
+        let mut ctx = EvaluationContext::new(Box::new(DummyConsole{}));
         ctx.set_variable_type("x", &ExpressionType::String);
         ctx.data = vec![&string1, &string2];
         let read_instr = GwRead::new(

@@ -13,13 +13,6 @@ pub mod swap_instr;
 pub mod data_instr;
 pub mod gosub_instr;
 
-//use std::fs::File;
-//use std::io::BufReader;
-use std::io;
-use std::io::prelude::*;
-use std::process::exit;
-//use crate::parser::ParserResult;
-
 pub use crate::eval::context::{
     evaluate_to_usize, EvaluationContext, ExpressionEvalResult, ExpressionType, GwInstruction,
     GwProgram, InstructionResult, LineExecutionArgument, ProgramLine,
@@ -532,7 +525,7 @@ impl GwInstruction for GwLoadStat {
         if let Some(up) = &mut context.underlying_program {
             return match result {
                 Ok(ExpressionEvalResult::StringResult(filename)) => {
-                    match up.load_from(&filename.trim_matches('"')) {
+                    match up.load_from(&filename.trim_matches('"'), &context.console) {
                         Ok(_) => {
                             println!("File loaded");
                         }
@@ -569,7 +562,7 @@ impl GwInstruction for GwRunStat {
         context: &mut EvaluationContext,
     ) -> InstructionResult {
         if let Some(program) = &context.underlying_program {
-            program.run();
+            program.run(&context.console);
         }
         InstructionResult::EvaluateNext
     }
@@ -585,12 +578,13 @@ impl GwInstruction for GwSystemStat {
         &self,
         _line: i16,
         _arg: LineExecutionArgument,
-        _context: &mut EvaluationContext,
+        context: &mut EvaluationContext,
     ) -> InstructionResult {
-        exit(0);
+        context.console.exit_program();
+        InstructionResult::EvaluateNext
     }
     fn fill_structure_string(&self, buffer: &mut String) {
-        buffer.push_str(&"RUN");
+        buffer.push_str(&"SYSTEM");
     }
 }
 
@@ -920,9 +914,9 @@ impl GwInstruction for GwInputStat {
         if let Some(ref prompt) = self.prompt {
             pr = prompt.as_str();
         }
-        print!("{}", pr);
-        io::stdout().flush().expect("Success");
-        io::stdin().read_line(&mut buffer).expect("Success");
+
+        context.console.print(pr);
+        context.console.read_line(&mut buffer);
 
         let mut var_idx = 0;
         for part in buffer.split(',') {
@@ -934,21 +928,6 @@ impl GwInstruction for GwInputStat {
             var_idx = var_idx + 1;
         }
 
-        // match context.get_variable_type(&self.variables) {
-        //     Some(GwVariableType::Double) => {
-        //         context.set_variable(
-        //             &self.variable,
-        //             &ExpressionEvalResult::DoubleResult(buffer.trim_end().parse::<f32>().unwrap()));
-        //     },
-        //     None => {
-        //         // Assume `double` for non-existing variable
-        //         context.set_variable(
-        //             &self.variable,
-        //             &ExpressionEvalResult::DoubleResult(buffer.trim_end().parse::<f32>().unwrap()));
-
-        //     },
-        //     _ => panic!("Not implemented INPUT for this type")
-        // }
         InstructionResult::EvaluateNext
     }
 
@@ -975,17 +954,9 @@ impl GwInstruction for GwInputStat {
 
 #[cfg(test)]
 mod eval_tests {
-    use std::collections::HashMap;
-
-    // use crate::gwparser::GwAssign;
-    // use crate::gwparser::GwIntegerLiteral;
-    // use crate::gwparser::ProgramLine;
-    // use crate::gwparser::GwProgram;
-    // use crate::gwparser::EvaluationContext;
-    // use crate::gwparser::ExpressionEvalResult;
-    //    use crate::parser::*;
-    use crate::eval::context::DefaultConsole;
+    use std::collections::HashMap;   
     use crate::eval::ExpressionEvalResult;
+    use crate::eval::context::Console;
     use crate::eval::*;
 
     #[test]
@@ -1008,7 +979,7 @@ mod eval_tests {
             underlying_program: None,
             pair_instruction_table: HashMap::new(),
             real_lines: Some(vec![&program.lines.get(0).unwrap().instruction]),
-            console: Box::new(DefaultConsole::new()),
+            console: Box::new(DummyConsole{}),
             data: vec![],
             data_position: -1,
             subroutine_stack: vec![]
@@ -1104,7 +1075,7 @@ mod eval_tests {
 
         let program = GwProgram { lines: vec![line1] };
 
-        let mut context = EvaluationContext::new();
+        let mut context = EvaluationContext::new(Box::new(DummyConsole{}));
         context.real_lines = Some(vec![]);
 
         context.declare_array("A", 10);
@@ -1134,10 +1105,51 @@ mod eval_tests {
             underlying_program: None,
             pair_instruction_table: HashMap::new(),
             real_lines: None,
-            console: Box::new(DefaultConsole::new()),
+            console: Box::new(DummyConsole{}),
             data: vec![],
             data_position: -1,
             subroutine_stack: vec![]
         }
+    }
+
+    pub struct DummyConsole {
+    }
+    
+    impl Console for DummyConsole {
+        fn print(&mut self, value: &str) {
+        todo!()
+    }
+
+        fn print_line(&mut self, value: &str) {
+        todo!()
+    }
+
+        fn read_line(&mut self, buffer: &mut String) {
+        todo!()
+    }
+
+        fn clear_screen(&mut self) {
+        todo!()
+    }
+
+        fn current_text_column(&self) -> usize {
+        todo!()
+    }
+
+        fn read_file_lines(&self, file_name: &str) -> Box<dyn Iterator<Item=String>> {
+        todo!()
+    }
+
+        fn flush(&self) {
+        todo!()
+    }
+
+        fn exit_program(&self) {
+        todo!()
+    }
+
+        fn clone(&self) -> Box<dyn Console> {
+        todo!()
+    }
     }
 }

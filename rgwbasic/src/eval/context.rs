@@ -2,11 +2,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use crate::parser::parse_instruction_line_from_string;
 use crate::parser::ParserResult;
-use std::fs::File;
-use std::io;
-use std::io::prelude::*;
 
-use std::io::BufReader;
 
 use super::GwExpression;
 
@@ -91,6 +87,7 @@ pub trait Console {
     fn read_line(&mut self, buffer: &mut String);
     fn clear_screen(&mut self);
     fn current_text_column(&self) -> usize;
+    fn read_file_lines(&self, file_name: &str) -> Box<dyn Iterator<Item=String>>;
     fn adjust_to_position(&mut self, position: usize) {
         let num_spaces: usize;
         let cur_column = self.current_text_column();
@@ -105,41 +102,10 @@ pub trait Console {
         }
     }
     fn flush(&self);
+    fn exit_program(&self);
+    fn clone(&self) -> Box<dyn Console>;
 }
 
-pub struct DefaultConsole {
-    column_position: usize
-}
-
-impl DefaultConsole {
-    pub fn new() -> DefaultConsole {
-        DefaultConsole {  column_position: 0 }
-    }
-}
-
-impl Console for DefaultConsole {
-    fn print(&mut self, value: &str) {
-        print!("{}", value);
-        self.column_position += value.len();
-    }
-
-    fn print_line(&mut self, value: &str) {
-        println!("{}", value);
-        self.column_position = 0;
-    }
-    fn read_line(&mut self, _buffer: &mut String) {
-        todo!();
-    }
-    fn clear_screen(&mut self) {
-        todo!();
-    }
-    fn current_text_column(&self) -> usize{
-        self.column_position + 1
-    }
-    fn flush(&self)  {
-        io::stdout().flush().expect("Success");
-    }
-}
 
 
 pub struct EvaluationContext<'a> {
@@ -158,7 +124,7 @@ pub struct EvaluationContext<'a> {
 
 
 impl EvaluationContext<'_>  {
-    pub fn new() -> EvaluationContext<'static>   {
+    pub fn new(console: Box<dyn Console>) -> EvaluationContext<'static>   {
         EvaluationContext {
             variables : HashMap::new(),
             jump_table : HashMap::new(),
@@ -167,12 +133,12 @@ impl EvaluationContext<'_>  {
             pair_instruction_table: HashMap::new(),
             real_lines: None,
             data: vec![],
-            console: Box::new( DefaultConsole::new()),
+            console,//: Box::new( DefaultConsole::new()),
             data_position: -1,
             subroutine_stack: vec![]
         }
     }
-    pub fn with_program(program : &mut GwProgram) -> EvaluationContext {
+    pub fn with_program(program : &mut GwProgram, console: Box<dyn Console>) -> EvaluationContext {
         EvaluationContext {
             variables : HashMap::new(),
             jump_table : HashMap::new(),
@@ -181,7 +147,7 @@ impl EvaluationContext<'_>  {
             pair_instruction_table: HashMap::new(),
             real_lines: None,
             data: vec![],
-            console: Box::new(DefaultConsole::new()),
+            console,//: Box::new(DefaultConsole::new()),
             data_position: -1,
             subroutine_stack: vec![]
         }
@@ -403,12 +369,13 @@ impl GwProgram {
         }
     }
 
-    pub fn load_from(&mut self, file_name : &str) -> io::Result<()> {
-        let f = File::open(file_name)?;
-        let reader = BufReader::new(f);
+    pub fn load_from(&mut self, file_name : &str, console: &Box<dyn Console>) -> Result<(), & 'static str> {
+        // let f = File::open(file_name)?;
+        // let reader = BufReader::new(f);
+        // let mut line_number = 1;
+        // for line in reader.lines() {
         let mut line_number = 1;
-        for line in reader.lines() {
-            let uline = line.unwrap();
+        for uline in console.read_file_lines(file_name) {
             println!(">> {}", uline);
             match parse_instruction_line_from_string(uline) {
                 ParserResult::Success(parsed_line) => self.add_line(parsed_line),
@@ -428,7 +395,7 @@ impl GwProgram {
         }
     }
 
-    pub fn run(&self) {
+    pub fn run(&self, console: &Box<dyn Console>) {
 
         let real_lines = &mut vec![];
         let mut global_data = vec![];
@@ -453,6 +420,7 @@ impl GwProgram {
         }
 
 
+        let new_console = (*console).clone();
         let mut context = EvaluationContext {
             array_variables: HashMap::new(),
             variables: HashMap::new(),
@@ -460,7 +428,7 @@ impl GwProgram {
             underlying_program: None,
             pair_instruction_table: HashMap::new(),
             real_lines: Some(real_lines.to_vec()),
-            console: Box::new(DefaultConsole::new()),
+            console: new_console,
             data: global_data,
             data_position: -1,
             subroutine_stack: vec![]

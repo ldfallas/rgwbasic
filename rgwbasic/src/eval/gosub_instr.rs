@@ -4,7 +4,7 @@ use super::{ EvaluationContext, LineExecutionArgument,
 
 /// AST element  for GOSUB subroutine invocation element
 /// For example:
-/// ```
+/// ```basic
 /// GOSUB 100
 /// ```
 pub struct GwGosub {
@@ -42,7 +42,7 @@ impl GwInstruction for GwGosub {
 
 /// AST element for the RETURN statement
 /// For example
-/// ```
+/// ```basic
 /// RETURN
 /// ```
 pub struct GwReturn {

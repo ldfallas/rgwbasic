@@ -12,9 +12,9 @@ impl GwInstruction for GwWhile {
              _arg: LineExecutionArgument,
              context : &mut EvaluationContext) -> InstructionResult {
         let mut wend_line : i16 = 0;
-        
+
         // Find the cached corresponding line for this WHILE statement
-        if let Some(corresponding_wend) =  context.pair_instruction_table.get(&line) {      
+        if let Some(corresponding_wend) =  context.pair_instruction_table.get(&line) {
             wend_line = *corresponding_wend;
         } else if let Some(ref real_lines) = context.real_lines {
             // Try to look for the WEND statement in the program lines
@@ -24,10 +24,10 @@ impl GwInstruction for GwWhile {
             } else {
                 context.pair_instruction_table.insert(line, index_of_wend);
                 context.pair_instruction_table.insert(index_of_wend, line);
-            }       
+            }
             wend_line = index_of_wend;
         }
-        
+
         // Evaluate the condition and move the following line
         let condition_evaluation = self.condition.eval(context);
         match condition_evaluation {
@@ -36,18 +36,18 @@ impl GwInstruction for GwWhile {
             }
             Ok(ExpressionEvalResult::IntegerResult(_)) => {
                 InstructionResult::EvaluateNext
-            }       
+            }
             _ => {
                 InstructionResult::EvaluateToError(String::from("Type mismatch"))
             }
         }
     }
-    
+
     fn fill_structure_string(&self, buffer : &mut String) {
         buffer.push_str(&"WHILE ");
         self.condition.fill_structure_string(buffer);
     }
-    fn is_while(&self) -> bool { true }     
+    fn is_while(&self) -> bool { true }
 }
 
 fn find_wend(line: i16, real_lines: &Vec<&Box<dyn GwInstruction>>) -> i16 {
@@ -82,7 +82,7 @@ impl GwInstruction for GwWend {
              line: i16,
              _arg: LineExecutionArgument,
              context : &mut EvaluationContext) -> InstructionResult{
-        if let Some(corresponding_while) =  context.pair_instruction_table.get(&line) {             
+        if let Some(corresponding_while) =  context.pair_instruction_table.get(&line) {
             InstructionResult::EvaluateLine(*corresponding_while)
         } else {
             InstructionResult::EvaluateToError(String::from("WEND WITHOUT WHILE"))
@@ -97,11 +97,13 @@ impl GwInstruction for GwWend {
 
 #[cfg(test)]
 mod while_eval_tests {
+    use crate::eval::eval_tests::DummyConsole;
     use crate::eval::*;
     use crate::eval::while_instr::*;
+
     #[test]
     fn it_iteratates_while_loop() {
-        let mut ctxt = EvaluationContext::new();
+        let mut ctxt = EvaluationContext::new(Box::new(DummyConsole{}));
         let w = GwWhile {
             condition: Box::new(GwVariableExpression { name: String::from("x") })
         };
@@ -116,12 +118,12 @@ mod while_eval_tests {
             match evaluation_result {
                 InstructionResult::EvaluateNext => true,
                 _ => false
-            });         
+            });
     }
 
     #[test]
     fn it_skips_to_end_while_loop() {
-        let mut ctxt = EvaluationContext::new();
+        let mut ctxt = EvaluationContext::new(Box::new(DummyConsole{}));
 
         let the_while = GwWhile {
             condition: Box::new(GwVariableExpression { name: String::from("x") })
@@ -129,7 +131,7 @@ mod while_eval_tests {
 
         let abox:Box<dyn context::GwInstruction> = Box::new(the_while );
         let wend :Box<dyn context::GwInstruction> = Box::new(GwWend{});
-        
+
         ctxt.real_lines = Some(vec![
             &abox,
             &wend
@@ -146,6 +148,6 @@ mod while_eval_tests {
             match evaluation_result {
                 InstructionResult::EvaluateLine(2) => true,
                 _ => false
-            });         
+            });
     }
 }
