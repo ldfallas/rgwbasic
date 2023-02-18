@@ -1,4 +1,4 @@
-
+use std::rc::Rc;
 use crate::eval::GwAssignableExpression;
 use crate::eval::GwInkey;
 use crate::tokens;
@@ -770,30 +770,30 @@ pub fn parse_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
 
 
 fn parse_list_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
-                      -> ParserResult<Box<dyn GwInstruction>> {
-    return ParserResult::Success(Box::new(
+                      -> ParserResult<Rc<dyn GwInstruction>> {
+    return ParserResult::Success(Rc::new(
         GwListStat {}
     ));
 }
 
 
 fn parse_run_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
-                      -> ParserResult<Box<dyn GwInstruction>> {
-    return ParserResult::Success(Box::new(
+                      -> ParserResult<Rc<dyn GwInstruction>> {
+    return ParserResult::Success(Rc::new(
         GwRunStat {}
     ));
 }
 
 fn parse_system_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
-                      -> ParserResult<Box<dyn GwInstruction>> {
-    return ParserResult::Success(Box::new(
+                      -> ParserResult<Rc<dyn GwInstruction>> {
+    return ParserResult::Success(Rc::new(
         GwSystemStat {}
     ));
 }
 
 
 fn parse_print_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
-                        -> ParserResult<Box<dyn GwInstruction>> {
+                        -> ParserResult<Rc<dyn GwInstruction>> {
     let mut is_using = false;
     if let Some(tok) = iterator.next() {
         if let GwToken::Keyword(tokens::GwBasicToken::UsingTok) = tok {
@@ -805,13 +805,13 @@ fn parse_print_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
 
     if let ParserResult::Success(exprs) = parse_with_flexible_separator(iterator) {
         if is_using  {
-            return ParserResult::Success(Box::new(
+            return ParserResult::Success(Rc::new(
                 GwPrintUsingStat {
                     expressions: exprs
                 }
             ));
         } else {
-            return ParserResult::Success(Box::new(
+            return ParserResult::Success(Rc::new(
                 GwPrintStat {
                     expressions: exprs
                 }
@@ -823,9 +823,9 @@ fn parse_print_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
 }
 
 fn parse_load_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
-                        -> ParserResult<Box<dyn GwInstruction>> {
+                        -> ParserResult<Rc<dyn GwInstruction>> {
     if let ParserResult::Success(expr) = parse_expression(iterator) {
-        return ParserResult::Success(Box::new(
+        return ParserResult::Success(Rc::new(
             GwLoadStat {
                 filename: expr
             }
@@ -890,7 +890,7 @@ macro_rules! parse_seq {
 
 
 fn parse_while_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
-			-> ParserResult<Box<dyn GwInstruction>> {
+			-> ParserResult<Rc<dyn GwInstruction>> {
 
     parse_seq![
 	iterator,
@@ -899,7 +899,7 @@ fn parse_while_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
 	},
 	{
 	    return ParserResult::Success(
-		Box::new(
+		Rc::new(
 		    GwWhile {
 			condition
 		    }
@@ -910,7 +910,7 @@ fn parse_while_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
 }
 
 fn parse_read_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
-                       -> ParserResult<Box<dyn GwInstruction>> {
+                       -> ParserResult<Rc<dyn GwInstruction>> {
     parse_seq![
         iterator,
         {
@@ -918,33 +918,33 @@ fn parse_read_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
         },
         {
             return ParserResult::Success(
-                Box::new(
+                Rc::new(
                     GwRead::new(variable_expression)))
         }
     ];
 }
 
 fn parse_gosub_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
-                        -> ParserResult<Box<dyn GwInstruction>> {
+                        -> ParserResult<Rc<dyn GwInstruction>> {
     parse_seq![
         iterator,
         {
             token(GwToken::Integer(line_number), "Expecting line number");
         },
         {
-            return ParserResult::Success(Box::new(GwGosub::new(line_number)));
+            return ParserResult::Success(Rc::new(GwGosub::new(line_number)));
         }
     ];
 }
 
 
 fn parse_return_stat<'a>(_iterator: &mut PushbackTokensIterator<'a>)
-                        -> ParserResult<Box<dyn GwInstruction>> {
-    ParserResult::Success(Box::new(GwReturn::new()))
+                        -> ParserResult<Rc<dyn GwInstruction>> {
+    ParserResult::Success(Rc::new(GwReturn::new()))
 }
 
 fn parse_swap_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
-                       -> ParserResult<Box<dyn GwInstruction>> {
+                       -> ParserResult<Rc<dyn GwInstruction>> {
     parse_seq![
         iterator,
         {
@@ -955,7 +955,7 @@ fn parse_swap_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
         },
         {
             return ParserResult::Success(
-                Box::new(
+                Rc::new(
                     GwSwap::new(
                         left,
                         right)))
@@ -964,7 +964,7 @@ fn parse_swap_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
 }
 
 fn parse_data_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
-                       -> ParserResult<Box<dyn GwInstruction>> {
+                       -> ParserResult<Rc<dyn GwInstruction>> {
     let chars_iterator = iterator.get_internal_iterator();
     let mut contents:Vec<String> = vec![];
     let mut done = false;
@@ -999,12 +999,12 @@ fn parse_data_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
         }
         
     }
-    ParserResult::Success(Box::new(GwData::new(contents)))
+    ParserResult::Success(Rc::new(GwData::new(contents)))
 }
 
 
 fn parse_dim_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
-                      -> ParserResult<Box<dyn GwInstruction>> {
+                      -> ParserResult<Rc<dyn GwInstruction>> {
     let array_decls = parse_with_separator(
         iterator,
         parse_dim_decl,
@@ -1015,11 +1015,11 @@ fn parse_dim_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
                     if decls.len() > 1 {
                         let first = decls.remove(0);
                         ParserResult::Success(
-                            Box::new(
+                            Rc::new(
                                 GwDim::new(first, Some(decls))))
                     } else {
                         ParserResult::Success(
-                            Box::new(
+                            Rc::new(
                                 GwDim::new(decls.remove(0), None)))
                     }
                 } else {
@@ -1053,7 +1053,7 @@ fn parse_dim_decl<'a>(iterator: &mut PushbackTokensIterator<'a>)
 }
 
 fn parse_for_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
-                      -> ParserResult<Box<dyn GwInstruction>> {
+                      -> ParserResult<Rc<dyn GwInstruction>> {
     parse_seq![
         iterator,
         {
@@ -1065,7 +1065,7 @@ fn parse_for_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
         },
         {
             ParserResult::Success(
-                Box::new(
+                Rc::new(
                     GwFor {
                         variable,
                         from,
@@ -1079,7 +1079,7 @@ fn parse_for_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
 }
 
 fn parse_next_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
-		       -> ParserResult<Box<dyn GwInstruction>> {
+		       -> ParserResult<Rc<dyn GwInstruction>> {
     let mut next_var: Option<String> = None;
     let next_tok = iterator.next();
     if let Some(GwToken::Identifier(id)) = next_tok {
@@ -1087,16 +1087,16 @@ fn parse_next_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
     } else if let Some(tok) = next_tok {
         iterator.push_back(tok);
     };
-    return ParserResult::Success(Box::new(GwNext{ variable: next_var}));
+    return ParserResult::Success(Rc::new(GwNext{ variable: next_var}));
 }
 
 fn parse_wend_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
-		       -> ParserResult<Box<dyn GwInstruction>> {
-    return ParserResult::Success(Box::new(GwWend{}));
+		       -> ParserResult<Rc<dyn GwInstruction>> {
+    return ParserResult::Success(Rc::new(GwWend{}));
 }
 
 fn parse_input_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
-                        -> ParserResult<Box<dyn GwInstruction>> {
+                        -> ParserResult<Rc<dyn GwInstruction>> {
     parse_seq![
 	iterator,
 	{
@@ -1107,7 +1107,7 @@ fn parse_input_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
 						       tokens::GwBasicToken::CommaSeparatorTok));
 	},
 	{
-	    return ParserResult::Success(Box::new(
+	    return ParserResult::Success(Rc::new(
 		    GwInputStat {
 			prompt: prompt,
 			variables: input_vars
@@ -1149,13 +1149,13 @@ fn parse_input_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
 }
 
 fn parse_if_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
-                     -> ParserResult<Box<dyn GwInstruction>> {
+                     -> ParserResult<Rc<dyn GwInstruction>> {
 
     if let ParserResult::Success(expr) =  parse_expression(iterator) {
         if let Some(GwToken::Keyword(tokens::GwBasicToken::ThenTok)) = iterator.next() {
             let next_token = iterator.next();
             if let Some(GwToken::Integer(line_number)) = next_token {
-                return ParserResult::Success(Box::new(
+                return ParserResult::Success(Rc::new(
                     GwIf::new(expr, line_number)
                 ));
             } else {
@@ -1163,7 +1163,7 @@ fn parse_if_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
                 iterator.push_back(next_token.unwrap());
                 match parse_same_line_instruction_sequence(iterator) {
                     ParserResult::Success(then_stats) => {
-                        return ParserResult::Success(Box::new(
+                        return ParserResult::Success(Rc::new(
                                    GwIfWithStats::new(expr, then_stats)));
                     }
                     ParserResult::Error(error) => ParserResult::Error(error),
@@ -1232,14 +1232,14 @@ fn parse_var_range<'a>(iterator : &mut PushbackTokensIterator<'a>)
 
 fn parse_deftype_stat<'a>(iterator : &mut PushbackTokensIterator<'a>,
                           definition_type: ExpressionType)
-                         -> ParserResult<Box<dyn GwInstruction>> {
+                         -> ParserResult<Rc<dyn GwInstruction>> {
     let ranges_result =
         parse_with_separator(iterator,
                              parse_var_range,
                              tokens::GwBasicToken::CommaSeparatorTok);
     match ranges_result {
         ParserResult::Success(ranges_vector) => {
-            return ParserResult::Success(Box::new(
+            return ParserResult::Success(Rc::new(
                 GwDefType::with_var_range(ranges_vector, definition_type)
             ));
         },
@@ -1251,8 +1251,8 @@ fn parse_deftype_stat<'a>(iterator : &mut PushbackTokensIterator<'a>,
 }
 
 fn parse_rem_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
-                      -> ParserResult<Box<dyn GwInstruction>> {
-    return ParserResult::Success(Box::new(
+                      -> ParserResult<Rc<dyn GwInstruction>> {
+    return ParserResult::Success(Rc::new(
         GwRem {
             comment: iterator.consume_rest_of_line()
         }
@@ -1261,20 +1261,20 @@ fn parse_rem_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
 
 
 fn parse_cls_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
-                      -> ParserResult<Box<dyn GwInstruction>> {
-    return ParserResult::Success(Box::new(
+                      -> ParserResult<Rc<dyn GwInstruction>> {
+    return ParserResult::Success(Rc::new(
         GwCls {}
         ));
 }
 
 fn parse_key_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
-                      -> ParserResult<Box<dyn GwInstruction>> {
+                      -> ParserResult<Rc<dyn GwInstruction>> {
     let next_token = iterator.next();
     match next_token {
         Some(GwToken::Keyword(tokens::GwBasicToken::OnTok)) =>
-            ParserResult::Success(Box::new(GwKeyStat { indicator : SwitchIndicator::On })),
+            ParserResult::Success(Rc::new(GwKeyStat { indicator : SwitchIndicator::On })),
         Some(GwToken::Keyword(tokens::GwBasicToken::OffTok)) =>
-            ParserResult::Success(Box::new(GwKeyStat { indicator : SwitchIndicator::Off })),
+            ParserResult::Success(Rc::new(GwKeyStat { indicator : SwitchIndicator::Off })),
         _ => ParserResult::Error(String::from("Error parsing Key statement"))
     }
 }
@@ -1399,7 +1399,7 @@ fn parse_with_flexible_separator<'a>(
 //
 
 fn parse_color_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
-                        -> ParserResult<Box<dyn GwInstruction>> {
+                        -> ParserResult<Rc<dyn GwInstruction>> {
     let color_components = parse_with_separator(
         iterator,
         parse_expression,
@@ -1412,7 +1412,7 @@ fn parse_color_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
             let green_expr = drain_iterator.next().unwrap();
             let blue_expr = drain_iterator.next().unwrap();
 
-            return ParserResult::Success(Box::new(GwColor {
+            return ParserResult::Success(Rc::new(GwColor {
                 red: red_expr,
                 green: green_expr,
                 blue: blue_expr
@@ -1426,9 +1426,9 @@ fn parse_color_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
 }
 
 fn parse_goto_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
-                        -> ParserResult<Box<dyn GwInstruction>> {
+                        -> ParserResult<Rc<dyn GwInstruction>> {
     if let Some(GwToken::Integer(line)) = iterator.next() {
-        return ParserResult::Success(Box::new(
+        return ParserResult::Success(Rc::new(
             GwGotoStat {
                 line
             }
@@ -1441,7 +1441,7 @@ fn parse_goto_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
 fn parse_array_assignemnt<'a>(
     iterator : &mut PushbackTokensIterator<'a>,
     identifier : String)
-    -> ParserResult<Box<dyn GwInstruction>> {
+    -> ParserResult<Rc<dyn GwInstruction>> {
     let array_indices_result =
         parse_with_separator(iterator,
                              parse_expression,
@@ -1451,7 +1451,7 @@ fn parse_array_assignemnt<'a>(
             if let Some(GwToken::Keyword(tokens::GwBasicToken::EqlTok))  = iterator.next() {
                 if let ParserResult::Success(expr) =  parse_expression(iterator) {
                     return ParserResult::Success(
-                        Box::new(
+                        Rc::new(
                             GwArrayAssign {
                                 variable: identifier,
                                 indices_expressions: array,
@@ -1473,7 +1473,7 @@ fn parse_array_assignemnt<'a>(
 
 
 fn parse_assignment<'a>(iterator : &mut PushbackTokensIterator<'a>, identifier : String)
-                        -> ParserResult<Box<dyn GwInstruction>> {
+                        -> ParserResult<Rc<dyn GwInstruction>> {
 
     if let Some(next_token)  = iterator.next() {
         if let GwToken::Keyword(tokens::GwBasicToken::LparTok) = next_token {
@@ -1481,7 +1481,7 @@ fn parse_assignment<'a>(iterator : &mut PushbackTokensIterator<'a>, identifier :
         } else if let GwToken::Keyword(tokens::GwBasicToken::EqlTok) = next_token {
             if let ParserResult::Success(expr) =  parse_expression(iterator) {
                 return ParserResult::Success(
-                    Box::new(
+                    Rc::new(
                     GwAssign {
                         variable: identifier,
                         expression: expr
@@ -1497,7 +1497,7 @@ fn parse_assignment<'a>(iterator : &mut PushbackTokensIterator<'a>, identifier :
     }
 }
 
-fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserResult<Box<dyn GwInstruction>> {
+fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserResult<Rc<dyn GwInstruction>> {
     if let Some(next_tok) = iterator.next() {
         match next_tok {
             GwToken::Keyword(tokens::GwBasicToken::GotoTok) => parse_goto_stat(iterator),
@@ -1552,7 +1552,7 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
 }
 
 pub fn parse_repl_instruction_string(line : String)
-                                          -> ParserResult<Box<dyn GwInstruction>> {
+                                          -> ParserResult<Rc<dyn GwInstruction>> {
 
     let pb = PushbackCharsIterator {
         chars: line.chars(),
@@ -1575,7 +1575,7 @@ pub fn parse_instruction_line_from_string(line : String)
 }
 
 fn parse_same_line_instruction_sequence<'a>(iterator : &mut PushbackTokensIterator<'a>)
-                                            -> ParserResult<Vec<Box<dyn GwInstruction>>> {
+                                            -> ParserResult<Vec<Rc<dyn GwInstruction>>> {
 
     parse_seq![
         iterator,
@@ -1600,7 +1600,7 @@ fn parse_same_line_instruction_sequence<'a>(iterator : &mut PushbackTokensIterat
 }
 
 fn continue_parse_same_line_instruction_sequence<'a>(iterator : &mut PushbackTokensIterator<'a>)
-                                            -> ParserResult<Vec<Box<dyn GwInstruction>>> {
+                                            -> ParserResult<Vec<Rc<dyn GwInstruction>>> {
     if let Some(next_tok) = iterator.next() {
         if let GwToken::Keyword(tokens::GwBasicToken::ColonSeparatorTok) = next_tok {
             iterator.push_back(next_tok);
@@ -1614,13 +1614,13 @@ fn continue_parse_same_line_instruction_sequence<'a>(iterator : &mut PushbackTok
 }
 
 fn parsing_same_line_instruction_sequence<'a>(iterator : &mut PushbackTokensIterator<'a>)
-                                              -> ParserResult<Vec<Box<dyn GwInstruction>>> {
-    let mut results = Vec::<Box<dyn GwInstruction>>::new();
+                                              -> ParserResult<Vec<Rc<dyn GwInstruction>>> {
+    let mut results = Vec::<Rc<dyn GwInstruction>>::new();
     while let Some(next_tok) = iterator.next() {
         if let GwToken::Keyword(tokens::GwBasicToken::ColonSeparatorTok) = next_tok {
             let instr_result = parse_instruction(iterator);
             if let ParserResult::Success(parsed_instruction) = instr_result {
-                results.push(parsed_instruction);
+                results.push(parsed_instruction.into());
             } else {
                 return ParserResult::Error(String::from("Error parsing same line statement"));
             }
@@ -1642,7 +1642,7 @@ pub fn parse_instruction_line<'a>(iterator : &mut PushbackTokensIterator<'a>)
                     return ParserResult::Success(
                         ProgramLine {
                             line : line_number,
-                            instruction : instr,
+                            instruction : instr.into(),
                             rest_instructions : Some(rest_inst)
                         }
                     );
@@ -1651,7 +1651,7 @@ pub fn parse_instruction_line<'a>(iterator : &mut PushbackTokensIterator<'a>)
                     return ParserResult::Success(
                         ProgramLine {
                             line : line_number,
-                            instruction : instr,
+                            instruction : instr.into(),
                             rest_instructions : None
                         }
                     );

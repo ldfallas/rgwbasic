@@ -1,9 +1,11 @@
+use std::rc::Rc;
 use super::{ EvaluationContext,
              ExpressionEvalResult,
              GwExpression,
              LineExecutionArgument,
              InstructionResult,
-             GwInstruction };
+             GwInstruction,
+             GwProgram };
 
 pub struct GwIf {
     condition: Box<dyn GwExpression>,
@@ -34,6 +36,7 @@ impl GwInstruction for GwIf {
         _line: i16,
         _arg: LineExecutionArgument,
         context: &mut EvaluationContext,
+        program: &mut GwProgram,
     ) -> InstructionResult {
         match self.condition.eval(context) {
             Ok(eval_result) if is_false_result(&eval_result) => {
@@ -65,12 +68,12 @@ impl GwInstruction for GwIf {
 //
 pub struct GwIfWithStats {
     condition: Box<dyn GwExpression>,
-    stats: Vec<Box<dyn GwInstruction>>
+    stats: Vec<Rc<dyn GwInstruction>>
 }
 
 impl GwIfWithStats {
     pub fn new(condition: Box<dyn GwExpression>,
-           stats: Vec<Box<dyn GwInstruction>>) -> GwIfWithStats {
+               stats: Vec<Rc<dyn GwInstruction>>) -> GwIfWithStats {
         GwIfWithStats {
             condition,
             stats
@@ -82,14 +85,15 @@ impl GwInstruction for GwIfWithStats {
     fn eval (&self,
              line: i16,
              _argument: LineExecutionArgument,
-             context : &mut EvaluationContext) -> InstructionResult {
+             context : &mut EvaluationContext,
+             program: &mut GwProgram) -> InstructionResult {
         match self.condition.eval(context) {
             Ok(eval_result) if is_false_result(&eval_result) => {
                 InstructionResult::EvaluateNext
             }
             Ok(_) => {
                 for stat in &self.stats {
-                    stat.eval(line, LineExecutionArgument::Empty, context);
+                    stat.eval(line, LineExecutionArgument::Empty, context, program);
                 }
                 InstructionResult::EvaluateNext
             }
@@ -117,15 +121,16 @@ impl GwInstruction for GwIfWithStats {
 mod if_stat_tests {
     use super::*;
     use crate::eval::{GwIntegerLiteral, GwAssign};
-    use crate::eval::eval_tests::empty_context;
+    use crate::eval::eval_tests::{ empty_context, empty_program };
     
     #[test]
     fn it_executes_then_stats() -> Result<(), & 'static str>{
         let mut ctx = empty_context();
+        let mut program = empty_program();
         let if_stat = GwIfWithStats::new(
             Box::new(GwIntegerLiteral::with_value(1)),
             vec![
-                Box::new(
+                Rc::new(
                     GwAssign {
                         variable: "x".into(),
                         expression: Box::new(GwIntegerLiteral::with_value(123))
@@ -134,7 +139,7 @@ mod if_stat_tests {
         );
         
         let eval_result =
-            if_stat.eval(0, LineExecutionArgument::Empty, &mut ctx);
+            if_stat.eval(0, LineExecutionArgument::Empty, &mut ctx, &mut program);
 
 
         assert!(
@@ -155,10 +160,11 @@ mod if_stat_tests {
     #[test]
     fn it_do_not_execute_then_stats() -> Result<(), & 'static str>{
         let mut ctx = empty_context();
+        let mut program = empty_program();
         let if_stat = GwIfWithStats::new(
             Box::new(GwIntegerLiteral::with_value(0)),
             vec![
-                Box::new(
+                Rc::new(
                     GwAssign {
                         variable: "x".into(),
                         expression: Box::new(GwIntegerLiteral::with_value(123))
@@ -167,7 +173,10 @@ mod if_stat_tests {
         );
         
         let eval_result =
-            if_stat.eval(0, LineExecutionArgument::Empty, &mut ctx);
+            if_stat.eval(0,
+                         LineExecutionArgument::Empty,
+                         &mut ctx,
+                         &mut program);
 
 
         assert!(

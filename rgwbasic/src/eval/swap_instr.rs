@@ -2,6 +2,7 @@ use super::{
     EvaluationContext,
     GwAssignableExpression,
     GwInstruction,
+    GwProgram,
     InstructionResult,
     LineExecutionArgument
 };
@@ -33,7 +34,8 @@ impl GwInstruction for GwSwap {
     fn eval (&self,
              _line: i16,
              _argument: LineExecutionArgument,
-             context : &mut EvaluationContext) -> InstructionResult {
+             context : &mut EvaluationContext,
+             program: &mut GwProgram) -> InstructionResult {
 
         match (self.left.eval(context), self.right.eval(context)) {
             (Ok(result1), Ok(result2)) => {
@@ -65,10 +67,11 @@ mod swap_tests {
 
     use super::*;
     use crate::eval::{ExpressionEvalResult, GwVariableExpression };
-    use crate::eval::eval_tests::empty_context;
+    use crate::eval::eval_tests::{empty_context, empty_program};
 
     #[test]
     fn it_swaps_variables() {
+        let mut program = empty_program();
         let mut ctx = empty_context();
         let stat =
             GwSwap::new(
@@ -86,7 +89,10 @@ mod swap_tests {
             { true }
             else { false });
 
-        let eval_result = stat.eval(1, LineExecutionArgument::Empty, &mut ctx);
+        let eval_result = stat.eval(1,
+                                    LineExecutionArgument::Empty,
+                                    &mut ctx,
+                                    &mut program);
 
         assert!(if let InstructionResult::EvaluateNext = eval_result { true } else { false });
 

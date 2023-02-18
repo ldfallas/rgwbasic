@@ -46,7 +46,7 @@ pub struct GwParenthesizedAccessExpr {
 }
 
 impl GwExpression for GwParenthesizedAccessExpr {
-    fn eval(&self, context: &mut EvaluationContext) 
+    fn eval(&self, context: &mut EvaluationContext)
                -> Result<ExpressionEvalResult, EvaluationError> {
         let mut evaluated_arguments = Vec::with_capacity(self.arguments.len());
         for arg in &self.arguments {
@@ -184,7 +184,7 @@ impl GwExpression for GwAbs {
             Ok(_) => {
                 Err("Type mismatch".to_string())
             },
-            err@Err(_) => err                 
+            err@Err(_) => err
         }
     }
     fn fill_structure_string(&self, buffer: &mut String) {
@@ -207,14 +207,14 @@ impl GwExpression for GwLog {
             }
             Ok(ExpressionEvalResult::SingleResult(value)) => {
                 Ok(ExpressionEvalResult::SingleResult(value.ln()))
-            }            
+            }
             Ok(ExpressionEvalResult::DoubleResult(value)) => {
                 Ok(ExpressionEvalResult::DoubleResult(value.ln()))
             }
             Ok(_) => Err("Type mismatch".to_string()),
             error@Err(_) => {
                 error
-            }            
+            }
         }
     }
     fn fill_structure_string(&self, buffer: &mut String) {
@@ -238,14 +238,14 @@ impl GwExpression for GwSin {
             }
             Ok(ExpressionEvalResult::SingleResult(value)) => {
                 Ok(ExpressionEvalResult::SingleResult(value.sin()))
-            }            
+            }
             Ok(ExpressionEvalResult::DoubleResult(value)) => {
                 Ok(ExpressionEvalResult::DoubleResult(value.sin()))
             }
             Ok(_) => Err("Type mismatch".to_string()),
             error@Err(_) => {
                 error
-            }            
+            }
         }
     }
     fn fill_structure_string(&self, buffer: &mut String) {
@@ -268,14 +268,14 @@ impl GwExpression for GwCos {
             }
             Ok(ExpressionEvalResult::SingleResult(value)) => {
                 Ok(ExpressionEvalResult::SingleResult(value.cos()))
-            }            
+            }
             Ok(ExpressionEvalResult::DoubleResult(value)) => {
                 Ok(ExpressionEvalResult::DoubleResult(value.cos()))
             }
             Ok(_) => Err("Type mismatch".to_string()),
             error@Err(_) => {
                 error
-            }            
+            }
         }
     }
     fn fill_structure_string(&self, buffer: &mut String) {
@@ -371,7 +371,7 @@ impl GwStringLiteral {
 }
 
 impl GwExpression for GwStringLiteral {
-    fn eval(&self, _context: &mut EvaluationContext) 
+    fn eval(&self, _context: &mut EvaluationContext)
                  -> Result<ExpressionEvalResult, EvaluationError> {
         Ok(ExpressionEvalResult::StringResult(String::from(&self.value)))
     }
@@ -392,7 +392,7 @@ impl GwIntegerLiteral {
 }
 
 impl GwExpression for GwIntegerLiteral {
-    fn eval(&self, _context: &mut EvaluationContext) 
+    fn eval(&self, _context: &mut EvaluationContext)
                  -> Result<ExpressionEvalResult, EvaluationError> {
         Ok(ExpressionEvalResult::IntegerResult(self.value))
     }
@@ -412,7 +412,7 @@ impl GwDoubleLiteral {
 }
 
 impl GwExpression for GwDoubleLiteral {
-    fn eval(&self, _context: &mut EvaluationContext) 
+    fn eval(&self, _context: &mut EvaluationContext)
                      -> Result<ExpressionEvalResult, EvaluationError> {
         Ok(ExpressionEvalResult::DoubleResult(self.value))
     }
@@ -432,9 +432,9 @@ impl GwAssignableExpression for GwVariableExpression {
             .unwrap_or(ExpressionType::Double)
     }
 
-    fn assign_value(&self, 
-                    value: ExpressionEvalResult, 
-                    context: &mut EvaluationContext) 
+    fn assign_value(&self,
+                    value: ExpressionEvalResult,
+                    context: &mut EvaluationContext)
                -> Result<(), String> {
         match context.set_variable(&self.name, &value) {
             Ok(_) => Ok(()),
@@ -450,7 +450,7 @@ impl GwVariableExpression {
 }
 
 impl GwExpression for GwVariableExpression {
-    fn eval(&self, context: &mut EvaluationContext) 
+    fn eval(&self, context: &mut EvaluationContext)
                     -> Result<ExpressionEvalResult, EvaluationError> {
         if let Some(value) = context.lookup_variable(&self.name) {
             Ok(value.clone())
@@ -496,13 +496,11 @@ impl GwInstruction for GwListStat {
     fn eval(
         &self,
         _line: i16,
-        _arg: LineExecutionArgument,
+        _arg: LineExecutionArgument,        
         context: &mut EvaluationContext,
+        program: &mut GwProgram
     ) -> InstructionResult {
-        if let Some(up) = &context.underlying_program {
-            up.list();
-        }
-
+        program.list(&mut context.console);
         InstructionResult::EvaluateNext
     }
     fn fill_structure_string(&self, buffer: &mut String) {
@@ -518,33 +516,31 @@ impl GwInstruction for GwLoadStat {
     fn eval(
         &self,
         _line: i16,
-        _arg: LineExecutionArgument,
+        _arg: LineExecutionArgument,        
         context: &mut EvaluationContext,
+        program: &mut GwProgram
     ) -> InstructionResult {
         let result = self.filename.eval(context);
-        if let Some(up) = &mut context.underlying_program {
-            return match result {
-                Ok(ExpressionEvalResult::StringResult(filename)) => {
-                    match up.load_from(&filename.trim_matches('"'), &context.console) {
-                        Ok(_) => {
-                            println!("File loaded");
-                        }
-                        Err(error) => {
-                            panic!("Error loading file {:?}", error);
-                        }
-                    }
-                    InstructionResult::EvaluateNext
-                }
-                Ok(_) => {
-                    InstructionResult::EvaluateToError("Type mismatch".to_string())
-                }
-                Err(error) => {
-                    InstructionResult::EvaluateToError(error)
-                }
-            };
-        }
-        InstructionResult::EvaluateNext
 
+        return match result {
+            Ok(ExpressionEvalResult::StringResult(filename)) => {
+                match program.load_from(&filename.trim_matches('"'), &context.console) {
+                    Ok(_) => {
+                        println!("File loaded");
+                    }
+                    Err(error) => {
+                        panic!("Error loading file {:?}", error);
+                    }
+                }
+                InstructionResult::EvaluateNext
+            }
+            Ok(_) => {
+                InstructionResult::EvaluateToError("Type mismatch".to_string())
+            }
+            Err(error) => {
+                InstructionResult::EvaluateToError(error)
+            }
+        };
     }
     fn fill_structure_string(&self, buffer: &mut String) {
         buffer.push_str(&"LOAD ");
@@ -560,10 +556,12 @@ impl GwInstruction for GwRunStat {
         _line: i16,
         _arg: LineExecutionArgument,
         context: &mut EvaluationContext,
+        program: &mut GwProgram
     ) -> InstructionResult {
-        if let Some(program) = &context.underlying_program {
-            program.run(&context.console);
-        }
+//        if let Some(program) = &context.underlying_program {
+//            program.run(&context.console);
+        //        }
+        program.run(&context.console);
         InstructionResult::EvaluateNext
     }
     fn fill_structure_string(&self, buffer: &mut String) {
@@ -579,6 +577,7 @@ impl GwInstruction for GwSystemStat {
         _line: i16,
         _arg: LineExecutionArgument,
         context: &mut EvaluationContext,
+        program: &mut GwProgram
     ) -> InstructionResult {
         context.console.exit_program();
         InstructionResult::EvaluateNext
@@ -599,6 +598,7 @@ impl GwInstruction for GwRem {
         _line: i16,
         _arg: LineExecutionArgument,
         _context: &mut EvaluationContext,
+        program: &mut GwProgram
     ) -> InstructionResult {
         InstructionResult::EvaluateNext
     }
@@ -617,6 +617,7 @@ impl GwInstruction for GwCls {
         _line: i16,
         _arg: LineExecutionArgument,
         _context: &mut EvaluationContext,
+        program: &mut GwProgram
     ) -> InstructionResult {
         InstructionResult::EvaluateNext
     }
@@ -637,8 +638,9 @@ impl GwInstruction for GwAssign {
         _line: i16,
         _arg: LineExecutionArgument,
         context: &mut EvaluationContext,
+        program: &mut GwProgram
     ) -> InstructionResult {
-        
+
         //let expression_evaluation = ;
         match self.expression.eval(context) {
             Ok(expression_evaluation) =>{
@@ -649,7 +651,7 @@ impl GwInstruction for GwAssign {
                     Err(error_message)
                         => InstructionResult::EvaluateToError(error_message.to_string()),
                     _ => InstructionResult::EvaluateNext
-                }                   
+                }
             }
             Err(error) => InstructionResult::EvaluateToError(error)
         }
@@ -676,6 +678,7 @@ impl GwInstruction for GwArrayAssign {
         _line: i16,
         _arg: LineExecutionArgument,
         context: &mut EvaluationContext,
+        program: &mut GwProgram
     ) -> InstructionResult {
         let mut evaluated_arguments: Vec<usize> =
                    Vec::with_capacity(self.indices_expressions.len());
@@ -727,6 +730,7 @@ impl GwInstruction for GwGotoStat {
         _line: i16,
         _arg: LineExecutionArgument,
         context: &mut EvaluationContext,
+        program: &mut GwProgram
     ) -> InstructionResult {
         if let Some(actual_line) = context.get_real_line(self.line) {
             return InstructionResult::EvaluateLine(actual_line);
@@ -756,6 +760,7 @@ impl GwInstruction for GwKeyStat {
         _line: i16,
         _arg: LineExecutionArgument,
         _context: &mut EvaluationContext,
+        program: &mut GwProgram
     ) -> InstructionResult {
         InstructionResult::EvaluateNext
     }
@@ -780,6 +785,7 @@ impl GwInstruction for GwColor {
         _line: i16,
         _arg: LineExecutionArgument,
         _context: &mut EvaluationContext,
+        program: &mut GwProgram
     ) -> InstructionResult {
         InstructionResult::EvaluateNext
     }
@@ -814,6 +820,7 @@ impl GwInstruction for GwPrintStat {
         _line: i16,
         _arg: LineExecutionArgument,
         context: &mut EvaluationContext,
+        program: &mut GwProgram
     ) -> InstructionResult {
         let mut i = 0;
         let mut newline_at_the_end = true;
@@ -908,6 +915,7 @@ impl GwInstruction for GwInputStat {
         _line: i16,
         _arg: LineExecutionArgument,
         context: &mut EvaluationContext,
+        program: &mut GwProgram
     ) -> InstructionResult {
         let mut buffer = String::new();
         let mut pr = "?";
@@ -954,7 +962,8 @@ impl GwInstruction for GwInputStat {
 
 #[cfg(test)]
 mod eval_tests {
-    use std::collections::HashMap;   
+    use std::collections::HashMap;
+    use std::rc::Rc;
     use crate::eval::ExpressionEvalResult;
     use crate::eval::context::Console;
     use crate::eval::*;
@@ -963,27 +972,32 @@ mod eval_tests {
     fn it_tests_basic_eval() {
         let line1 = ProgramLine {
             line: 10,
-            instruction: Box::new(GwAssign {
+            instruction: Rc::new(GwAssign {
                 variable: String::from("X"),
                 expression: Box::new(GwIntegerLiteral { value: 10 }),
             }),
             rest_instructions: None,
         };
+        let clonned_instr = (&line1.instruction).clone();
 
-        let program = GwProgram { lines: vec![line1] };
+        let mut program = GwProgram {
+            lines: vec![line1],
+            data: vec![],
+            real_lines: vec![clonned_instr]
+        };
 
         let mut context = EvaluationContext {
             variables: HashMap::new(),
             array_variables: HashMap::new(),
             jump_table: HashMap::new(),
-            underlying_program: None,
+    //        underlying_program: None,
             pair_instruction_table: HashMap::new(),
-            real_lines: Some(vec![&program.lines.get(0).unwrap().instruction]),
+  //          real_lines: Some(vec![&program.lines.get(0).unwrap().instruction]),
             console: Box::new(DummyConsole{}),
-            data: vec![],
+//            data: vec![],
             data_position: -1,
-            subroutine_stack: vec![]
-                
+            subroutine_stack: vec![],
+            current_real_line: -1
         };
 
         context
@@ -1016,7 +1030,7 @@ mod eval_tests {
         let mut context = empty_context();
 
         match negation.eval(&mut context) {
-            Ok(ExpressionEvalResult::IntegerResult(x)) => { 
+            Ok(ExpressionEvalResult::IntegerResult(x)) => {
                 assert_eq!(x, -1);
                 Ok(())
             }
@@ -1053,7 +1067,7 @@ mod eval_tests {
         let mut context = empty_context();
 
         match negation.eval(&mut context) {
-            Ok(ExpressionEvalResult::DoubleResult(x)) => { 
+            Ok(ExpressionEvalResult::DoubleResult(x)) => {
                 assert_eq!(x, -2.5);
                 Ok(())
             }
@@ -1065,7 +1079,7 @@ mod eval_tests {
     fn it_tests_basic_array_eval() {
         let line1 = ProgramLine {
             line: 10,
-            instruction: Box::new(GwArrayAssign {
+            instruction: Rc::new(GwArrayAssign {
                 variable: String::from("A"),
                 indices_expressions: vec![Box::new(GwIntegerLiteral::with_value(1))],
                 expression: Box::new(GwIntegerLiteral { value: 12 }),
@@ -1073,10 +1087,10 @@ mod eval_tests {
             rest_instructions: None,
         };
 
-        let program = GwProgram { lines: vec![line1] };
+        let mut program = GwProgram { lines: vec![line1], data: vec![], real_lines: vec![] };
 
         let mut context = EvaluationContext::new(Box::new(DummyConsole{}));
-        context.real_lines = Some(vec![]);
+//        context.real_lines = Some(vec![]);
 
         context.declare_array("A", 10);
 
@@ -1097,24 +1111,33 @@ mod eval_tests {
         }
     }
 
-    pub fn empty_context() -> EvaluationContext<'static> {
+    pub fn empty_program() -> GwProgram {
+        GwProgram {
+            lines: vec![],
+            real_lines: vec![],
+            data: vec![],
+        }
+    }
+
+    pub fn empty_context() -> EvaluationContext {
         EvaluationContext {
             variables: HashMap::new(),
             array_variables: HashMap::new(),
             jump_table: HashMap::new(),
-            underlying_program: None,
+            //underlying_program: None,
             pair_instruction_table: HashMap::new(),
-            real_lines: None,
+            //real_lines: None,
             console: Box::new(DummyConsole{}),
-            data: vec![],
+            //data: vec![],
             data_position: -1,
-            subroutine_stack: vec![]
+            subroutine_stack: vec![],
+            current_real_line: -1
         }
     }
 
     pub struct DummyConsole {
     }
-    
+
     impl Console for DummyConsole {
         fn print(&mut self, value: &str) {
         todo!()

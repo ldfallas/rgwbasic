@@ -34,7 +34,7 @@ fn main() -> io::Result<()> {
             match parser::parse_repl_instruction_string (uline) {
                 parser::ParserResult::Success(parsed_instr) => {
                     let mut context = eval::EvaluationContext::with_program(&mut program, Box::new(DefaultConsole::new()));
-                    parsed_instr.eval(-1, eval::LineExecutionArgument::Empty, &mut context);
+                    parsed_instr.eval(-1, eval::LineExecutionArgument::Empty, &mut context, &mut program);
                     context.console.flush();
                 }
                 parser::ParserResult::Error(msg) => {

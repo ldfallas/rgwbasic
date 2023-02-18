@@ -1,9 +1,8 @@
+use std::rc::Rc;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use crate::parser::parse_instruction_line_from_string;
 use crate::parser::ParserResult;
-
-
 use super::GwExpression;
 
 
@@ -16,8 +15,8 @@ pub enum LineExecutionArgument {
 
 pub struct ProgramLine {
     pub line : i16,
-    pub instruction : Box<dyn GwInstruction>,
-    pub rest_instructions : Option<Vec<Box<dyn GwInstruction>>>
+    pub instruction : Rc<dyn GwInstruction>,
+    pub rest_instructions : Option<Vec<Rc<dyn GwInstruction>>>
 }
 
 #[derive(Debug)]
@@ -30,10 +29,11 @@ pub enum InstructionResult {
 }
 
 pub trait GwInstruction {
-    fn eval (&self,
-             line: i16,
-             argument: LineExecutionArgument,
-             context : &mut EvaluationContext) -> InstructionResult;
+    fn eval(&self,
+            line: i16,
+            argument: LineExecutionArgument,
+            context: &mut EvaluationContext,
+            program: &mut GwProgram) -> InstructionResult;
     fn fill_structure_string(&self, buffer : &mut String);
     fn is_wend(&self) -> bool { false }
     fn is_while(&self) -> bool { false }
@@ -104,38 +104,43 @@ pub trait Console {
     fn flush(&self);
     fn exit_program(&self);
     fn clone(&self) -> Box<dyn Console>;
+    fn log(&self, msg: &str) {
+        println!("{}",msg)
+    }
 }
 
 
 
-pub struct EvaluationContext<'a> {
+pub struct EvaluationContext/*<'a>*/ {
     pub variables: HashMap<String, ExpressionEvalResult>,
     pub array_variables: HashMap<String, GwArray>,
     pub jump_table: HashMap<i16, i16>,
-    pub underlying_program: Option<&'a mut GwProgram>,
+//    pub underlying_program: Option<&'a mut GwProgram>,
     pub pair_instruction_table: HashMap<i16, i16>,
-    pub real_lines: Option<Vec<& 'a Box<dyn GwInstruction>>>,
-    pub data: Vec<& 'a String>,
+//    pub real_lines: Option<Vec<& 'a Box<dyn GwInstruction>>>,
+//    pub data: Vec<& 'a String>,
     pub console: Box<dyn Console>,
     pub data_position: i32,
-    pub subroutine_stack: Vec<i16>
+    pub subroutine_stack: Vec<i16>,
+    pub current_real_line: i32
 }
 
 
 
-impl EvaluationContext<'_>  {
-    pub fn new(console: Box<dyn Console>) -> EvaluationContext<'static>   {
+impl EvaluationContext/*<'_>*/  {
+    pub fn new(console: Box<dyn Console>) -> EvaluationContext/*<'static>*/   {
         EvaluationContext {
             variables : HashMap::new(),
             jump_table : HashMap::new(),
             array_variables: HashMap::new(),
-            underlying_program: None,
+            //underlying_program: None,
             pair_instruction_table: HashMap::new(),
-            real_lines: None,
-            data: vec![],
+            //real_lines: None,
+            //data: vec![],
             console,//: Box::new( DefaultConsole::new()),
             data_position: -1,
-            subroutine_stack: vec![]
+            subroutine_stack: vec![],
+            current_real_line: -1,
         }
     }
     pub fn with_program(program : &mut GwProgram, console: Box<dyn Console>) -> EvaluationContext {
@@ -143,13 +148,14 @@ impl EvaluationContext<'_>  {
             variables : HashMap::new(),
             jump_table : HashMap::new(),
             array_variables: HashMap::new(),
-            underlying_program: Some(program),
+            //underlying_program: Some(program),
             pair_instruction_table: HashMap::new(),
-            real_lines: None,
-            data: vec![],
+            //real_lines: None,
+            //data: vec![],
             console,//: Box::new(DefaultConsole::new()),
             data_position: -1,
-            subroutine_stack: vec![]
+            subroutine_stack: vec![],
+            current_real_line: -1,
         }
     }
 
@@ -225,10 +231,10 @@ impl EvaluationContext<'_>  {
         }
     }
 
-    pub fn get_next_data_item(&mut self) -> Option<&String> {
+    pub fn get_next_data_item<'a>(&mut self, program: &'a GwProgram) -> Option<&'a String> {
         self.data_position += 1;
 
-        if let Some(ref the_value) = self.data.get(self.data_position as usize) {
+        if let Some(ref the_value) = program.data.get(self.data_position as usize) {
             Some(the_value)
         } else {
             None
@@ -356,16 +362,23 @@ impl GwArray {
     }
 }
 
+pub struct StepExecutionInfo/*<'a>*/ {
+    pub last_step_result: InstructionResult,
+//    pub execution_context: EvaluationContext/*<'a>*/
+}
 
 pub struct GwProgram {
     pub lines : Vec<ProgramLine>,
-//    lines_index : Vec<u16>
+    pub real_lines: Vec<Rc<dyn GwInstruction>>,
+    pub data: Vec<String>
 }
 
 impl GwProgram {
     pub fn new() -> GwProgram {
         GwProgram {
             lines: Vec::new(),
+            real_lines: Vec::new(),
+            data: Vec::new()                
         }
     }
 
@@ -387,24 +400,25 @@ impl GwProgram {
         Ok(())
     }
 
-    pub fn list(&self) {
+    pub fn list(&self, console: &mut Box<dyn Console>) {
         for element in self.lines.iter() {
             let mut string_to_print = String::new();
             element.fill_structure_string(&mut string_to_print);
-            println!("{}", string_to_print);
+            console.print_line(string_to_print.as_str());
         }
     }
 
-    pub fn run(&self, console: &Box<dyn Console>) {
 
-        let real_lines = &mut vec![];
+
+    fn prepare_context(&mut self, console: &Box<dyn Console>) -> EvaluationContext {
+        let real_lines = &mut self.real_lines;// &mut vec![];
         let mut global_data = vec![];
         let mut table = HashMap::new();
         let mut i = 0;
 
         for e in self.lines.iter() {
             table.insert(e.get_line(), i);
-            real_lines.push(&e.instruction);
+            real_lines.push(e.instruction.clone());
             if let Some(data) = e.instruction.get_data() {
                 for data_item in data {
                     global_data.push(data_item);
@@ -413,41 +427,93 @@ impl GwProgram {
             i += 1;
             if let Some(ref rest) = e.rest_instructions {
                 for nested in rest {
-                    real_lines.push(&nested);
+                    real_lines.push(nested.clone());
                     i += 1;
                 }
             }
         }
 
-
         let new_console = (*console).clone();
-        let mut context = EvaluationContext {
+        let  context = EvaluationContext {
             array_variables: HashMap::new(),
             variables: HashMap::new(),
             jump_table: table,
-            underlying_program: None,
+            //underlying_program: None,
             pair_instruction_table: HashMap::new(),
-            real_lines: Some(real_lines.to_vec()),
+            //real_lines: Some(real_lines.to_vec()),
             console: new_console,
-            data: global_data,
+            //data: global_data,
             data_position: -1,
-            subroutine_stack: vec![]
-                
+            subroutine_stack: vec![],
+            current_real_line: -1
         };
-        //      for j in 1..self.lines.len() {
+//        self.real_lines = *real_lines;
+        return context;
+    }
 
-        // {
-        //     let real_lines = &mut context.real_lines.as_mut().expect("the vec");
-        //     for e in self.lines.iter() {
-        //         real_lines.push(&e.instruction);
-        //         if let Some(ref rest) = e.rest_instructions {
-        //             for nested in rest {
-        //                 real_lines.push(&nested);
-        //             }
-        //         }
-        //     }
-        // }
+    pub fn start_step_execution(&mut self, console: &Box<dyn Console>) -> (StepExecutionInfo, EvaluationContext) {
+        let mut context = self.prepare_context(console);
+        let real_lines = &self.real_lines;// &context.real_lines.as_ref().expect("real_lines calculated");
+        context.current_real_line = 0;
+        let line = &real_lines[0].clone();
+        let eval_result =
+            line.eval(
+                0,
+                LineExecutionArgument::Empty,
+                &mut context,
+                self);
 
+        (StepExecutionInfo {
+//            execution_context: context,
+            last_step_result: eval_result
+        }, context)
+    }
+
+    pub fn step(&mut self,
+                step_execution: &StepExecutionInfo,
+                execution_context: &mut EvaluationContext) -> StepExecutionInfo {
+        let mut context = /*step_execution.*/execution_context;
+        let real_lines = &self.real_lines; //&context.real_lines.as_ref().expect("real_lines calculated");
+        let mut arg = &LineExecutionArgument::Empty;
+        let mut finish_execution = false;
+        match &step_execution.last_step_result {
+            InstructionResult::EvaluateNext => {
+                context.current_real_line += 1;
+            }
+            InstructionResult::EvaluateLine(new_line) => {
+                context.current_real_line = usize::try_from(*new_line).unwrap() as i32;
+            }
+            InstructionResult::EvaluateLineWithArg(new_line, result_arg) => {
+                arg = result_arg;
+                context.current_real_line = usize::try_from(*new_line).unwrap() as i32;
+            }
+            InstructionResult::EvaluateEnd => {
+                finish_execution = true;
+            },
+            InstructionResult::EvaluateToError(error_message) => {
+                context.console.print("RUNTIME ERROR: ");
+                context.console.print_line(error_message.as_str());
+                finish_execution = true;
+            }
+        }
+
+        let line = &real_lines[context.current_real_line as usize].clone();
+        let new_eval_result =
+            line.eval(
+                0,
+                LineExecutionArgument::Empty,
+                &mut context,
+                self);
+
+        StepExecutionInfo {
+            //execution_context: context,
+            last_step_result: new_eval_result
+        }
+        
+    }
+
+    pub fn run(&mut self, console: &Box<dyn Console>) {
+        let mut context = self.prepare_context(console);
         self.eval(&mut context);
     }
 
@@ -466,20 +532,22 @@ impl GwProgram {
         self.lines.push(new_line);
     }
 
-    pub fn eval(&self, context: &mut EvaluationContext) {
+    pub fn eval(&mut self, context: &mut EvaluationContext) {
         let mut current_index = 0;
         let mut arg = LineExecutionArgument::Empty;
         loop {
-            let real_lines = &context.real_lines.as_ref().expect("real_lines calculated");
-            if current_index >= real_lines.len() {
+     //       let real_lines = &self.real_lines;//&context.real_lines.as_ref().expect("real_lines calculated");
+            if current_index >= self.real_lines.len() {
                 break;
             }
 
+            let line = &self.real_lines[current_index].clone();
             let eval_result =
-                     real_lines[current_index].eval(
+                     line.eval(
                          current_index as i16,
                          arg,
-                         context);
+                         context,
+                         self);
             arg = LineExecutionArgument::Empty;
             match eval_result {
                 InstructionResult::EvaluateNext => {
@@ -496,7 +564,8 @@ impl GwProgram {
                     break;
                 },
                 InstructionResult::EvaluateToError(error_message) => {
-                    println!("RUNTIME ERROR: {}", error_message);
+                    context.console.print("RUNTIME ERROR: ");
+                    context.console.print_line(error_message.as_str());
                     break;
                 }
             }

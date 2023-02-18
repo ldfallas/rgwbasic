@@ -1,4 +1,5 @@
 use super::context::{EvaluationContext, ExpressionType, GwInstruction,
+                     GwProgram,
                      InstructionResult, LineExecutionArgument};
 
 pub enum DefVarRange {
@@ -25,7 +26,8 @@ impl GwInstruction for GwDefType {
     fn eval (&self,
              _line: i16,
              _arg: LineExecutionArgument,
-             context : &mut EvaluationContext) -> InstructionResult{
+             context : &mut EvaluationContext,
+             program: &mut GwProgram) -> InstructionResult{
 
         for range in &self.ranges {
             set_range_type(&range, &self.definition_type, context);
@@ -91,7 +93,7 @@ fn set_range_type(range: &DefVarRange,
 mod definition_type_tests {
     use super::*;
     use crate::eval::*;
-    use crate::eval::eval_tests::empty_context;
+    use crate::eval::eval_tests::{empty_context, empty_program};
 
     #[test]
     fn it_sets_double_type() -> Result<(), & 'static str> {
@@ -128,12 +130,13 @@ mod definition_type_tests {
     
     fn try_to_assign(var_name: &str, declare_as: ExpressionType)
                      -> (bool,bool,bool,bool) {
+        let mut program = empty_program();
         let var_name_char = var_name.chars().nth(0).unwrap();
         let instr = GwDefType::with_var_range(vec![DefVarRange::Single(var_name_char)],
                                               declare_as);
         let mut context = empty_context();
 
-        instr.eval(1, LineExecutionArgument::Empty, &mut context);
+        instr.eval(1, LineExecutionArgument::Empty, &mut context, &mut program);
         
         let dbl_assign = context.set_variable(var_name, &ExpressionEvalResult::DoubleResult(3 as f64));
         let single_assign = context.set_variable(var_name, &ExpressionEvalResult::SingleResult(3 as f32));

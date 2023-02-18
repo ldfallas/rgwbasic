@@ -1,5 +1,5 @@
 use super::{ EvaluationContext, LineExecutionArgument,
-             InstructionResult, GwInstruction };
+             InstructionResult, GwInstruction, GwProgram };
 
 
 /// AST element  for GOSUB subroutine invocation element
@@ -21,7 +21,8 @@ impl GwInstruction for GwGosub {
     fn eval (&self,
              line: i16,
              argument: LineExecutionArgument,
-             context : &mut EvaluationContext) -> InstructionResult {
+             context : &mut EvaluationContext,
+             program: &mut GwProgram) -> InstructionResult {
         if let LineExecutionArgument::SubReturn = argument {
             InstructionResult::EvaluateNext
         } else {
@@ -58,7 +59,8 @@ impl GwInstruction for GwReturn {
     fn eval (&self,
              _line: i16,
              _argument: LineExecutionArgument,
-             context : &mut EvaluationContext) -> InstructionResult {
+             context : &mut EvaluationContext,
+             program: &mut GwProgram) -> InstructionResult {
         if let Some(line_to_return) = context.pop_return() {
             InstructionResult::EvaluateLineWithArg(
                 line_to_return,

@@ -4,6 +4,7 @@ use super::{
     EvaluationContext,
     InstructionResult,
     GwInstruction,
+    GwProgram,
     LineExecutionArgument,
     PrintSeparator,
     PrintElementWrapper
@@ -82,7 +83,8 @@ impl GwInstruction for GwPrintUsingStat {
     fn eval (&self,
              _line: i16,
              _arg: LineExecutionArgument,
-             context: &mut EvaluationContext) -> InstructionResult {
+             context: &mut EvaluationContext,
+             program: &mut GwProgram) -> InstructionResult {
         if let Some((PrintElementWrapper::Expr(expr), _)) = self.expressions.get(0) {
             if let Ok(ExpressionEvalResult::StringResult(a_atr)) = expr.eval(context) {
                 let format_string = &a_atr.as_str();

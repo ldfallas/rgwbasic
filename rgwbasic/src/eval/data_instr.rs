@@ -1,7 +1,7 @@
 use super::{ ExpressionType,
              ExpressionEvalResult,
              EvaluationContext,
-             GwInstruction, GwAssignableExpression,
+             GwInstruction, GwAssignableExpression, GwProgram,
              LineExecutionArgument,
              InstructionResult };
 
@@ -26,7 +26,8 @@ impl GwInstruction for GwData {
     fn eval (&self,
              _line: i16,
              _argument: LineExecutionArgument,
-             _context : &mut super::EvaluationContext) -> InstructionResult {
+             _context : &mut super::EvaluationContext,
+             program: &mut GwProgram) -> InstructionResult {
         InstructionResult::EvaluateNext
     }
 
@@ -92,9 +93,10 @@ impl GwInstruction for GwRead {
     fn eval (&self,
              _line: i16,
              _argument: LineExecutionArgument,
-             context : &mut EvaluationContext) -> InstructionResult {
+             context : &mut EvaluationContext,
+             program: &mut GwProgram) -> InstructionResult {
         let var_type = self.variable_expr.get_type(context);
-        if let Some(next_data) = context.get_next_data_item() {
+        if let Some(next_data) = context.get_next_data_item(program) {
             match var_type {
                 ExpressionType::String => {
                     let clonned_string = next_data.clone();
@@ -142,7 +144,7 @@ impl GwInstruction for GwRead {
 mod data_tests {
     use super::*;
     use crate::eval::eval_tests::DummyConsole;
-    use crate::eval::{ ExpressionType, GwVariableExpression };
+    use crate::eval::{ ExpressionType, GwVariableExpression, GwProgram };
 
     #[test]
     fn it_reads_number_data() -> Result<(), & 'static str> {
@@ -150,10 +152,14 @@ mod data_tests {
         let string2 = "second".to_string();
         let mut ctx = EvaluationContext::new(Box::new(DummyConsole{}));
         ctx.set_variable_type("x", &ExpressionType::String);
-        ctx.data = vec![&string1, &string2];
+        let mut program = GwProgram {
+            lines: vec![],
+            real_lines: vec![],
+            data: vec![string1, string2]
+        };
         let read_instr = GwRead::new(
             Box::new(GwVariableExpression::with_name("x".to_string())));
-        match read_instr.eval(1, LineExecutionArgument::Empty, &mut ctx) {
+        match read_instr.eval(1, LineExecutionArgument::Empty, &mut ctx, &mut program) {
             InstructionResult::EvaluateNext => {
                 assert_eq!(ExpressionEvalResult::StringResult("first".to_string()),
                            *ctx.lookup_variable("x").unwrap());

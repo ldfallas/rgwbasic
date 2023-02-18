@@ -1,6 +1,8 @@
+use std::rc::Rc;
 use super::{GwExpression, GwInstruction,
             InstructionResult, EvaluationContext, ExpressionEvalResult,
-            LineExecutionArgument};
+            LineExecutionArgument,
+            GwProgram };
 
 pub struct GwWhile {
     pub condition : Box<dyn GwExpression>,
@@ -10,15 +12,16 @@ impl GwInstruction for GwWhile {
     fn eval (&self,
              line: i16,
              _arg: LineExecutionArgument,
-             context : &mut EvaluationContext) -> InstructionResult {
+             context : &mut EvaluationContext,
+             program: &mut GwProgram) -> InstructionResult {
         let mut wend_line : i16 = 0;
 
         // Find the cached corresponding line for this WHILE statement
         if let Some(corresponding_wend) =  context.pair_instruction_table.get(&line) {
             wend_line = *corresponding_wend;
-        } else if let Some(ref real_lines) = context.real_lines {
+        } else {
             // Try to look for the WEND statement in the program lines
-            let index_of_wend = find_wend(line, real_lines);
+            let index_of_wend = find_wend(line, &program.real_lines);
             if index_of_wend == -1 {
                 return InstructionResult::EvaluateToError(String::from("WHILE WITHOUT WEND"));
             } else {
@@ -50,7 +53,7 @@ impl GwInstruction for GwWhile {
     fn is_while(&self) -> bool { true }
 }
 
-fn find_wend(line: i16, real_lines: &Vec<&Box<dyn GwInstruction>>) -> i16 {
+fn find_wend(line: i16, real_lines: &Vec<Rc<dyn GwInstruction>>) -> i16 {
     let mut curr_line = line + 1;
     let mut while_end_balance = 0;
     loop {
@@ -81,7 +84,8 @@ impl GwInstruction for GwWend {
     fn eval (&self,
              line: i16,
              _arg: LineExecutionArgument,
-             context : &mut EvaluationContext) -> InstructionResult{
+             context : &mut EvaluationContext,
+             program: &mut GwProgram) -> InstructionResult{
         if let Some(corresponding_while) =  context.pair_instruction_table.get(&line) {
             InstructionResult::EvaluateLine(*corresponding_while)
         } else {
@@ -101,18 +105,32 @@ mod while_eval_tests {
     use crate::eval::*;
     use crate::eval::while_instr::*;
 
+    use crate::eval::eval_tests::{ empty_program  };
+
     #[test]
     fn it_iteratates_while_loop() {
+
         let mut ctxt = EvaluationContext::new(Box::new(DummyConsole{}));
-        let w = GwWhile {
+        let w = Rc::new(GwWhile {
             condition: Box::new(GwVariableExpression { name: String::from("x") })
+        });
+        let wend = Rc::new(GwWend {});
+
+        let mut program = GwProgram {
+            lines: vec![],
+            real_lines: vec![w.clone(), wend.clone()],
+            data: vec![],
         };
 
         let assign_result = ctxt.set_variable(
             &String::from("x"),
             &ExpressionEvalResult::IntegerResult(1));
         assert!(if let Ok(_) = assign_result { true } else { false} );
-        let evaluation_result = w.eval(0, LineExecutionArgument::Empty, &mut ctxt);
+        let evaluation_result = w.eval(0,
+                                       LineExecutionArgument::Empty,
+                                       &mut ctxt,
+                                       &mut program);
+
 
         assert!(
             match evaluation_result {
@@ -129,20 +147,26 @@ mod while_eval_tests {
             condition: Box::new(GwVariableExpression { name: String::from("x") })
         };
 
-        let abox:Box<dyn context::GwInstruction> = Box::new(the_while );
-        let wend :Box<dyn context::GwInstruction> = Box::new(GwWend{});
+        let abox: Rc<dyn context::GwInstruction> = Rc::new(the_while );
+        let wend: Rc<dyn context::GwInstruction> = Rc::new(GwWend{});
 
-        ctxt.real_lines = Some(vec![
-            &abox,
-            &wend
-        ]);
-
+        let mut program = GwProgram {
+            lines: vec![],
+            real_lines: vec![abox.clone(), wend.clone()],
+            data: vec![],
+        };
+        
+        
         let assign_result =
             ctxt.set_variable(
                 &String::from("x"),
                 &ExpressionEvalResult::IntegerResult(0));
+
         assert!(if let Ok(_) = assign_result { true } else { false } );
-        let evaluation_result = abox.eval(0, LineExecutionArgument::Empty, &mut ctxt);
+        let evaluation_result = abox.eval(0,
+                                          LineExecutionArgument::Empty,
+                                          &mut ctxt,
+                                          &mut program);
 
         assert!(
             match evaluation_result {

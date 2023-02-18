@@ -1,5 +1,5 @@
 use super::{EvaluationContext, 
-            GwInstruction, GwExpression,
+            GwInstruction, GwExpression, GwProgram,
             evaluate_to_usize,
             InstructionResult,
             LineExecutionArgument};
@@ -61,7 +61,8 @@ impl GwInstruction for GwDim {
     fn eval(&self,
              _line: i16,
              _arg: LineExecutionArgument,
-            context : &mut EvaluationContext) -> InstructionResult {
+            context : &mut EvaluationContext,
+            program: &mut GwProgram) -> InstructionResult {
         if let Err(e) = self.declaration.perform_declaration(context) {
             return InstructionResult::EvaluateToError(e);
         }
@@ -127,12 +128,13 @@ fn evaluate_sequence_of_integers(exprs: &Vec<Box<dyn GwExpression>>,
 #[cfg(test)]
 mod dim_tests {
     use std::result::Result;
-    use crate::eval::*;
+    use crate::eval::*;    
     use super::*;
 
 
     #[test]
     fn it_declares_array_with_dim() -> Result<(), String> {
+        let mut program = eval_tests::empty_program();
         let dim = GwDim::new(
                      GwDimDecl::new(
                          "arr".to_string(),
@@ -145,7 +147,7 @@ mod dim_tests {
             return Err("Array already defined!".to_string());
         }
 
-        dim.eval(1, LineExecutionArgument::Empty, &mut context);
+        dim.eval(1, LineExecutionArgument::Empty, &mut context, &mut program);
 
         if let Some(_) = context.get_existing_array("arr") {
             Ok(())

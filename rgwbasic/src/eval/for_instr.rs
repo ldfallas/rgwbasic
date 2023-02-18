@@ -1,4 +1,6 @@
-use super::{GwExpression, GwInstruction, EvaluationContext,
+use std::rc::Rc;
+
+use super::{GwExpression, GwInstruction, GwProgram, EvaluationContext,
             LineExecutionArgument,
             InstructionResult, ExpressionEvalResult, evaluate_to_usize};
 
@@ -30,12 +32,13 @@ impl GwInstruction for GwFor {
     fn eval (&self,
              line: i16,
              arg: LineExecutionArgument,
-             context: &mut EvaluationContext) -> InstructionResult {
+             context: &mut EvaluationContext,
+             program: &mut GwProgram) -> InstructionResult {
         let mut next_line : i16 = 0;
         if let Some(corresponding_next) = context.pair_instruction_table.get(&line) {
             next_line = *corresponding_next;
-        } else if let Some(ref real_lines) = context.real_lines {
-            let index_of_next = find_next(line, real_lines);
+        } else { //if let Some(ref real_lines) = context.real_lines {
+            let index_of_next = find_next(line, &program.real_lines);
             if index_of_next == -1 {
                 return InstructionResult::EvaluateToError(String::from("NEXT WITHOUT FOR"));
             } else {
@@ -75,7 +78,7 @@ impl GwInstruction for GwFor {
     }
 }
 
-fn find_next(line: i16, real_lines: &Vec<&Box<dyn GwInstruction>>) -> i16 {
+fn find_next(line: i16, real_lines: &Vec<Rc<dyn GwInstruction>>) -> i16 {
     let mut curr_line = line + 1;
     let mut next_balance = 0;
     loop {
@@ -111,7 +114,8 @@ impl GwInstruction for GwNext {
     fn eval (&self,
              line: i16,
              _arg: LineExecutionArgument,
-             context: &mut EvaluationContext) -> InstructionResult {
+             context: &mut EvaluationContext,
+             program: &mut GwProgram) -> InstructionResult {
         if let Some(corresponding_for) =  context.pair_instruction_table.get(&line) {
             InstructionResult::EvaluateLineWithArg(
                 *corresponding_for,
@@ -142,7 +146,7 @@ fn get_as_integer(value: &Option<&ExpressionEvalResult>) -> Result<i16, String> 
 mod for_eval_tests {
     use crate::eval::*;
     use crate::eval::for_instr::*;
-    use crate::eval::eval_tests::DummyConsole;
+    use crate::eval::eval_tests::{ DummyConsole, empty_program };
     
     #[test]
     fn it_iteratates_for_loop() {
@@ -154,16 +158,23 @@ mod for_eval_tests {
             step: None
         };
 
-        let abox:Box<dyn context::GwInstruction> = Box::new(instr );
-        let inext :Box<dyn context::GwInstruction> = Box::new(GwNext{ variable: None});
+        let abox: Rc<dyn context::GwInstruction> = Rc::new(instr );
+        let inext: Rc<dyn context::GwInstruction> = Rc::new(GwNext{ variable: None});
 
-        ctxt.real_lines = Some(vec![
-            &abox,
-            &inext
-        ]);
+        let mut program = GwProgram {            
+            real_lines: vec![
+                abox.clone(),
+                inext.clone()
+            ],
+            data: vec![],
+            lines: vec![]
+        };
 
         let mut tmp_arg = LineExecutionArgument::Empty;
-        let mut evaluation_result = abox.eval(0, LineExecutionArgument::Empty, &mut ctxt);
+        let mut evaluation_result = abox.eval(0,
+                                              LineExecutionArgument::Empty,
+                                              &mut ctxt,
+                                              &mut program);
 
         assert!(
             match evaluation_result {
@@ -171,7 +182,7 @@ mod for_eval_tests {
                 _ => false
             });
 
-        evaluation_result = inext.eval(1,tmp_arg, &mut ctxt);
+        evaluation_result = inext.eval(1,tmp_arg, &mut ctxt, &mut program);
 
         tmp_arg = LineExecutionArgument::Empty;
         assert!(
@@ -183,7 +194,7 @@ mod for_eval_tests {
                 _ => false
             });
 
-        evaluation_result = abox.eval(1,tmp_arg, &mut ctxt);
+        evaluation_result = abox.eval(1,tmp_arg, &mut ctxt, &mut program);
 
         tmp_arg = LineExecutionArgument::Empty;
         assert!(
@@ -192,7 +203,7 @@ mod for_eval_tests {
                 _ => false
             });
 
-        evaluation_result = inext.eval(1,tmp_arg, &mut ctxt);
+        evaluation_result = inext.eval(1,tmp_arg, &mut ctxt, &mut program);
 
         tmp_arg = LineExecutionArgument::Empty;
         assert!(
@@ -204,7 +215,7 @@ mod for_eval_tests {
                 _ => false
             });
 
-        evaluation_result = abox.eval(0,tmp_arg, &mut ctxt);
+        evaluation_result = abox.eval(0,tmp_arg, &mut ctxt, &mut program);
 
         tmp_arg = LineExecutionArgument::Empty;
         assert!(
@@ -213,7 +224,7 @@ mod for_eval_tests {
                 _ => false
             });
 
-        evaluation_result = inext.eval(1,tmp_arg, &mut ctxt);
+        evaluation_result = inext.eval(1,tmp_arg, &mut ctxt, &mut program);
         tmp_arg = LineExecutionArgument::Empty;
         assert!(
             match evaluation_result {
@@ -225,14 +236,12 @@ mod for_eval_tests {
             });
 
 
-        evaluation_result = abox.eval(0,tmp_arg, &mut ctxt);
+        evaluation_result = abox.eval(0,tmp_arg, &mut ctxt, &mut program);
 
         assert!(
             match evaluation_result {
                 InstructionResult::EvaluateLine(2) =>  true,
                 _ => false
             });
-
-
     }
 }
