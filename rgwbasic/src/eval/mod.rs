@@ -16,6 +16,7 @@ pub mod gosub_instr;
 pub use crate::eval::context::{
     evaluate_to_usize, EvaluationContext, ExpressionEvalResult, ExpressionType, GwInstruction,
     GwProgram, InstructionResult, LineExecutionArgument, ProgramLine,
+    AsyncAction
 };
 
 pub type EvaluationError = String;
@@ -913,10 +914,17 @@ impl GwInstruction for GwInputStat {
     fn eval(
         &self,
         _line: i16,
-        _arg: LineExecutionArgument,
+        arg: LineExecutionArgument,
         context: &mut EvaluationContext,
         program: &mut GwProgram
     ) -> InstructionResult {
+
+        if let LineExecutionArgument::SupplyPendingResult(ref line) = arg {
+            read_variable_from_input(&self.variables[0], context, line);
+            return InstructionResult::EvaluateNext;
+        }
+
+        
         let mut buffer = String::new();
         let mut pr = "?";
         if let Some(ref prompt) = self.prompt {
@@ -924,19 +932,22 @@ impl GwInstruction for GwInputStat {
         }
 
         context.console.print(pr);
-        context.console.read_line(&mut buffer);
-
-        let mut var_idx = 0;
-        for part in buffer.split(',') {
-            let read_result =
-                read_variable_from_input(&self.variables[var_idx], context, part);
-            if let Err(error_message) = read_result {
-                return InstructionResult::EvaluateToError(error_message);
+        if context.console.requires_async_readline() {
+            InstructionResult::RequestAsyncAction(AsyncAction::ReadLine)
+        } else {            
+            context.console.read_line(&mut buffer);
+            let mut var_idx = 0;
+            for part in buffer.split(',') {
+                let read_result =
+                    read_variable_from_input(&self.variables[var_idx], context, part);
+                if let Err(error_message) = read_result {
+                    return InstructionResult::EvaluateToError(error_message);
+                }
+                var_idx = var_idx + 1;
             }
-            var_idx = var_idx + 1;
-        }
 
-        InstructionResult::EvaluateNext
+            InstructionResult::EvaluateNext
+        }
     }
 
     fn fill_structure_string(&self, buffer: &mut String) {

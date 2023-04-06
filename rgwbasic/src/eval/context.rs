@@ -10,7 +10,8 @@ use super::GwExpression;
 pub enum LineExecutionArgument {
     Empty,
     NextIteration,
-    SubReturn
+    SubReturn,
+    SupplyPendingResult(String)
 }
 
 pub struct ProgramLine {
@@ -20,12 +21,25 @@ pub struct ProgramLine {
 }
 
 #[derive(Debug)]
+pub enum AsyncAction {
+    ReadLine
+}
+
+#[derive(Debug)]
 pub enum InstructionResult {
     EvaluateNext,
     EvaluateLine(i16),
     EvaluateLineWithArg(i16, LineExecutionArgument),
     EvaluateEnd,
-    EvaluateToError(String)
+    EvaluateToError(String),
+    RequestAsyncAction(AsyncAction)
+}
+
+#[derive(Debug)]
+pub enum EvalFragmentAsyncResult {
+    YieldToLine(usize, LineExecutionArgument),
+    EvaluationEnd,
+    ReadLine(usize)
 }
 
 pub trait GwInstruction {
@@ -104,6 +118,8 @@ pub trait Console {
     fn flush(&self);
     fn exit_program(&self);
     fn clone(&self) -> Box<dyn Console>;
+    fn requires_async_readline(&self) -> bool { true }
+//    fn read_line_async<F>(&self, result_handler: &F) where F: Fn(&str) -> ;
     fn log(&self, msg: &str) {
         println!("{}",msg)
     }
@@ -410,7 +426,7 @@ impl GwProgram {
 
 
 
-    fn prepare_context(&mut self, console: &Box<dyn Console>) -> EvaluationContext {
+    pub fn prepare_context(&mut self, console: &Box<dyn Console>) -> EvaluationContext {
         let real_lines = &mut self.real_lines;// &mut vec![];
         let mut global_data = vec![];
         let mut table = HashMap::new();
@@ -494,7 +510,11 @@ impl GwProgram {
                 context.console.print("RUNTIME ERROR: ");
                 context.console.print_line(error_message.as_str());
                 finish_execution = true;
+            },
+            InstructionResult::RequestAsyncAction(AsyncAction::ReadLine) => {
+                context.console.print("Read line");
             }
+            
         }
 
         let line = &real_lines[context.current_real_line as usize].clone();
@@ -532,6 +552,61 @@ impl GwProgram {
         self.lines.push(new_line);
     }
 
+    pub fn eval_fragment_async(&mut self,
+                               line: usize,
+                               line_execution_arg: LineExecutionArgument,
+                               context: &mut EvaluationContext)
+                            -> EvalFragmentAsyncResult{
+//        let mut current_index = 0;
+        //        let mut arg = LineExecutionArgument::Empty;
+        let mut current_index = line;
+        let mut arg = line_execution_arg;
+        loop {
+     //       let real_lines = &self.real_lines;//&context.real_lines.as_ref().expect("real_lines calculated");
+            if current_index >= self.real_lines.len() {
+                //break;
+                return EvalFragmentAsyncResult::EvaluationEnd;
+            }
+
+            context.current_real_line = current_index as i32;
+            let line = &self.real_lines[current_index].clone();
+            let eval_result =
+                     line.eval(
+                         current_index as i16,
+                         arg,
+                         context,
+                         self);
+            arg = LineExecutionArgument::Empty;
+            match eval_result {
+                InstructionResult::EvaluateNext => {
+                    current_index = current_index + 1;
+                }
+                InstructionResult::EvaluateLine(new_line) => {
+                    current_index = usize::try_from(new_line).unwrap();
+                }
+                InstructionResult::EvaluateLineWithArg(new_line, result_arg) => {
+                    arg = result_arg;
+                    current_index = usize::try_from(new_line).unwrap();
+                }
+                InstructionResult::EvaluateEnd => {
+                    //break;
+                    return EvalFragmentAsyncResult::EvaluationEnd;
+                    
+                },
+                InstructionResult::EvaluateToError(error_message) => {
+                    context.console.print("RUNTIME ERROR: ");
+                    context.console.print_line(error_message.as_str());
+                    //break;
+                    return EvalFragmentAsyncResult::EvaluationEnd;
+                },
+                InstructionResult::RequestAsyncAction(_) => {
+                    //panic!("Attempting to execute async operation in sync evaluation");
+                    return EvalFragmentAsyncResult::ReadLine(current_index);
+                }                
+            }
+        }
+    }
+
     pub fn eval(&mut self, context: &mut EvaluationContext) {
         let mut current_index = 0;
         let mut arg = LineExecutionArgument::Empty;
@@ -567,7 +642,10 @@ impl GwProgram {
                     context.console.print("RUNTIME ERROR: ");
                     context.console.print_line(error_message.as_str());
                     break;
-                }
+                },
+                InstructionResult::RequestAsyncAction(_) => {
+                    panic!("Attempting to execute async operation in sync evaluation");
+                }                
             }
         }
     }

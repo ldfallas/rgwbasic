@@ -17,7 +17,12 @@ window.log = function(str) {
     console.log(str);
 }
 
-var interpreter = wasm.GwWsmInterpreter.new();
+window.readLine = function(continueFunc) {
+    let txt = prompt();
+    setTimeout(() => continueFunc(txt));
+}
+
+var interpreter = wasm.GwInterpreterWrapper.new(); //wasm.GwWsmInterpreter.new();
 //interpreter.start_interpreter();
 
 window.interpreter = interpreter;
@@ -59,10 +64,18 @@ setTimeout( () => {
         return state.lineReadResultPromise;
     };
 
+    const step = (interpreter) => {
+        interpreter.step_current_program();
+        requestAnimationFrame(() => step(interpreter))
+    }
 
     const replLoop =  () => {
         state.readLine().then( (line) => {
             if (line.toLowerCase() == 'run') {
+                console.log("catched 'run' invocation");
+                //interpreter.start_step_execution();
+                //requestAnimationFrame(() => step(interpreter))
+                interpreter.run_evaluator_loop(interpreter);
             } else {
                 interpreter.eval_in_interpreter(line);
             }
@@ -72,7 +85,7 @@ setTimeout( () => {
     };
     requestAnimationFrame(replLoop);
     
-    state.keyPressHandler = (e) => {
+    state.keyUpHandler = (e) => {
         if (!state.lineReadResultPromiseResolve) {
             return;
         }
@@ -87,9 +100,10 @@ setTimeout( () => {
         } else if (e.keyCode === 8) { // << this only works with keydown
             var subs = e.target.innerHTML;
             e.target.innerHTML = subs.substr(0, subs.length - 1);
-        } else {
-            e.target.innerHTML = e.target.innerHTML + String.fromCharCode(e.keyCode);
-            state.lineTxt = state.lineTxt + String.fromCharCode(e.keyCode);
+            state.lineTxt = subs.substr(0, subs.length - 1);
+        } else if (e.key.length === 1)  {
+            e.target.innerHTML = e.target.innerHTML + e.key/*String.fromCharCode(e.keyCode)*/;
+            state.lineTxt = state.lineTxt + e.key/*String.fromCharCode(e.keyCode)*/;
         }
         if (e.key == ' ') {
             // Avoid auto scrolling
@@ -98,7 +112,7 @@ setTimeout( () => {
     };
     var restoreStateToCurrentLine = function(state, mainElement) {
         var rowPre = state.currentLinePre;
-        rowPre.removeEventListener('keypress', state.keyPressHandler);
+        rowPre.removeEventListener('keyup', state.keyUpHandler);
         rowPre.classList.remove('focused');
         rowPre.removeAttribute('tabIndex');
     };
@@ -113,7 +127,7 @@ setTimeout( () => {
             rowPre.classList.add('focused');
             rowPre.tabIndex = -1;
             state.currentLinePre = rowPre;
-            rowPre.addEventListener('keypress', state.keyPressHandler);
+            rowPre.addEventListener('keyup', state.keyUpHandler);
             rowDiv.appendChild(rowPre);
             main.appendChild(rowDiv);
             rowPre.focus();
@@ -124,7 +138,7 @@ setTimeout( () => {
                 var nextPre = nextDiv.children[0];
                 state.currentLinePre = nextPre;
                 state.currentLine++;
-                nextPre.addEventListener('keypress', state.keyPressHandler);
+                nextPre.addEventListener('keyup', state.keyUpHandler);
                 nextPre.classList.add('focused');
                 nextPre.setAttribute('tabIndex', '-1');
                 nextPre.focus();
@@ -140,7 +154,7 @@ setTimeout( () => {
             rowPre.classList.add('focused');
             rowPre.tabIndex = -1;
             state.currentLinePre = rowPre;
-            rowPre.addEventListener('keypress', state.keyPressHandler);
+            rowPre.addEventListener('keyup', state.keyUpHandler);
             setTimeout(() => {
                 rowPre.focus();
             });
