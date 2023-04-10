@@ -1,10 +1,17 @@
 mod utils;
 use rgwbasic::eval::LineExecutionArgument;
 use rgwbasic::{parser, eval};
-use rgwbasic::eval::context::{Console, StepExecutionInfo, EvaluationContext, EvalFragmentAsyncResult};
+use rgwbasic::eval::context::{AsyncAction,
+                              Console,
+                              StepExecutionInfo,
+                              EvaluationContext,
+                              EvalFragmentAsyncResult,
+                              InstructionResult };
 use wasm_bindgen::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
+use web_sys::{Request, RequestInit, RequestMode, Response};
+use js_sys::{JsString, Promise};
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -28,6 +35,16 @@ fn browser_request_animation_frame(f: &Closure<dyn FnMut()>) {
         .expect("Call to 'request_animation_frame'");
 }
 
+fn fetch_util_get(url: &str) ->  Promise {
+    let mut options = RequestInit::new();
+    options.method("GET");
+    let request = Request::new_with_str_and_init(url, &options).expect("Request");
+    request.headers().set("Accept", "text/plain");
+    let window =
+        web_sys::window().expect("Cannot access 'window'");
+    window.fetch_with_request(&request)
+}
+
 #[wasm_bindgen]
 pub struct GwInterpreterWrapper {
     interpreter: Rc<RefCell<GwWsmInterpreter>>
@@ -42,8 +59,36 @@ impl GwInterpreterWrapper {
     }
 
     pub fn eval_in_interpreter(&mut self, command: &str) {
-        log("using wrapped");
-        self.interpreter.borrow_mut().eval_in_interpreter(command);
+                utils::set_panic_hook();
+        log("using wrapped(about)");
+        let result = self.interpreter.borrow_mut().eval_in_interpreter(command, None);
+        let interpreter1 = self.interpreter.clone();
+        let cmd1 = String::from(command);
+        if let Some(AsyncAction::LoadProgram(program_name)) = result {
+            log("load async 2");
+            let interpreter2 = interpreter1.clone();
+            let closure = Closure::new(move |response:JsValue|{
+                let cmd2 = cmd1.clone();
+                log("load async 3");
+                let interpreter3 = interpreter2.clone();
+                let resp: Response = response.dyn_into().unwrap();
+                let closure2 = Closure::new(move |response2:JsValue|{
+                    let cmd3 = cmd2.clone();
+                    log("load async 4");
+                    let resp: JsString = response2.dyn_into().unwrap();
+                    let code = resp.as_string().unwrap();//.split("\n");
+                    interpreter3.borrow_mut().eval_in_interpreter(
+                        &cmd3,
+                        Some(LineExecutionArgument::SupplyPendingResult(code))
+                    );
+                    
+                });
+                resp.text().expect("No text").then(&closure2);
+                closure2.forget();
+            });
+            fetch_util_get(&program_name).then(&closure);
+            closure.forget();
+        }
     }
 
     pub fn run_evaluator_loop(&mut self) {
@@ -110,6 +155,24 @@ impl GwInterpreterWrapper {
                 log("Ending program execution");
 //                let _ = f.take();
             }
+            EvalFragmentAsyncResult::YieldToLine(line_to_continue, execution_arg) => {
+                let hold_closure_rc = Rc::new(RefCell::new(None));
+                let actual_rc = hold_closure_rc.clone();
+                let interpreter_new = interpreter.clone();
+                *actual_rc.borrow_mut() = Some(Closure::new(move || {
+                    log(format!("Ready to continue to: {},{:?}", line_to_continue, &execution_arg).as_str());
+                    let new_result = interpreter_new.borrow_mut().continue_async_fragment(
+                        line_to_continue,
+                        execution_arg.clone()
+                       // LineExecutionArgument::Empty
+                    );
+                    let _ = hold_closure_rc.take();
+                    GwInterpreterWrapper::evaluate_async_fragmen_result(
+                        new_result,
+                        interpreter_new.clone());
+                }));
+                browser_request_animation_frame(actual_rc.borrow().as_ref().unwrap());
+            }
             EvalFragmentAsyncResult::ReadLine(line_to_continue) => {
                 let f2 = Rc::new(RefCell::new(None));
                 let g2 = f2.clone();                    
@@ -175,6 +238,8 @@ impl Console for HtmlDivConsole {
     fn exit_program(&self) {
         todo!()
     }
+
+    fn requires_async_readline(&self) -> bool { true  }
 
     fn clone(&self) -> Box<dyn Console> {
 
@@ -281,30 +346,36 @@ impl GwWsmInterpreter {
         WsStepExecutionInfo::new(tmp_result, false)
     }
     
-    pub fn eval_in_interpreter(&mut self, command: &str) {
+    pub fn eval_in_interpreter(&mut self, command: &str, evaluation_arg: Option<LineExecutionArgument>) -> Option<AsyncAction> {
 //        let mut program = eval::GwProgram::new();
 //        let mut console = HtmlDivConsole{};
 //        console.print_line("Ok");
         //let mut uline = "PRINT (10 + 20)".to_string();
+        let eval_arg = evaluation_arg.unwrap_or(eval::LineExecutionArgument::Empty);
         log("1. eval in interpreter");
         let mut uline = command.to_string();
         if !uline.is_empty() && uline.chars().next().unwrap().is_ascii_digit() {
             match parser::parse_instruction_line_from_string(uline) {
-                parser::ParserResult::Success(parsed_line) =>  self.program.add_line(parsed_line),
-                parser::ParserResult::Error(error) => println!("Error: {}", error),
-                parser::ParserResult::Nothing=> println!("Nothing")       
-            }
+                parser::ParserResult::Success(parsed_line) => { self.program.add_line(parsed_line); }
+                parser::ParserResult::Error(error) => { println!("Error: {}", error); }
+                parser::ParserResult::Nothing => { println!("Nothing"); }
+            };
         } else {
             log("2. ???");
             match parser::parse_repl_instruction_string (uline) {
                 parser::ParserResult::Success(parsed_instr) => {
                     log("about to eval instruction");
                     let mut context = eval::EvaluationContext::with_program(&mut self.program, Box::new(HtmlDivConsole{}));
-                    log("2. eval in interpreter");
-                    parsed_instr.eval(-1,
-                                      eval::LineExecutionArgument::Empty,
+                    log("2. eval in interpreter__");
+                    let result = parsed_instr.eval(-1,
+                                      eval_arg,
                                       &mut context,
-                                      &mut self.program);
+                                                   &mut self.program);
+                    log("load async 1");
+                    if let InstructionResult::RequestAsyncAction( 
+                        async_action) = result {
+                        return Some(async_action);
+                    }
                     context.console.flush();
                 }
                 parser::ParserResult::Error(msg) => {
@@ -315,5 +386,6 @@ impl GwWsmInterpreter {
                 }
             }
         }
+        None
     }
 }

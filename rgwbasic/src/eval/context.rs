@@ -5,8 +5,9 @@ use crate::parser::parse_instruction_line_from_string;
 use crate::parser::ParserResult;
 use super::GwExpression;
 
+const MAX_ITERATIONS_WITHOUT_REFRESH: u32 = 30;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LineExecutionArgument {
     Empty,
     NextIteration,
@@ -22,7 +23,8 @@ pub struct ProgramLine {
 
 #[derive(Debug)]
 pub enum AsyncAction {
-    ReadLine
+    ReadLine,
+    LoadProgram(String)
 }
 
 #[derive(Debug)]
@@ -118,7 +120,7 @@ pub trait Console {
     fn flush(&self);
     fn exit_program(&self);
     fn clone(&self) -> Box<dyn Console>;
-    fn requires_async_readline(&self) -> bool { true }
+    fn requires_async_readline(&self) -> bool { false  }
 //    fn read_line_async<F>(&self, result_handler: &F) where F: Fn(&str) -> ;
     fn log(&self, msg: &str) {
         println!("{}",msg)
@@ -398,18 +400,29 @@ impl GwProgram {
         }
     }
 
-    pub fn load_from(&mut self, file_name : &str, console: &Box<dyn Console>) -> Result<(), & 'static str> {
+    pub fn load_from(&mut self,
+                     file_name: &str,
+                     console: &mut Box<dyn Console>,
+                     file_lines: Box<dyn Iterator<Item = String>>)
+                -> Result<(), & 'static str> {
         // let f = File::open(file_name)?;
         // let reader = BufReader::new(f);
         // let mut line_number = 1;
         // for line in reader.lines() {
         let mut line_number = 1;
-        for uline in console.read_file_lines(file_name) {
-            println!(">> {}", uline);
+        //for uline in console.read_file_lines(file_name) {
+        for uline in file_lines {
+            console.print_line(format!(">> {}", uline).as_str());
             match parse_instruction_line_from_string(uline) {
-                ParserResult::Success(parsed_line) => self.add_line(parsed_line),
-                ParserResult::Error(error) => {println!("Line {} Error: {}", line_number, error); break;},
-                ParserResult::Nothing=> println!("Nothing")
+                ParserResult::Success(parsed_line) => {
+                    console.log("adding line");
+                    self.add_line(parsed_line);},
+                ParserResult::Error(error) => {/*return Err(format!("Line {} Error: {}", line_number, error)); */
+
+                 console.log("aaa");
+                return Err("Parsing error");},
+                ParserResult::Nothing=> {console.log("nothing");} //println!("Nothing")}
+                _ => { console.log("last"); }
             }
             line_number = line_number + 1;
         }
@@ -514,7 +527,9 @@ impl GwProgram {
             InstructionResult::RequestAsyncAction(AsyncAction::ReadLine) => {
                 context.console.print("Read line");
             }
-            
+            InstructionResult::RequestAsyncAction(AsyncAction::LoadProgram(_)) => {
+                context.console.print("LP");
+            }            
         }
 
         let line = &real_lines[context.current_real_line as usize].clone();
@@ -561,7 +576,10 @@ impl GwProgram {
         //        let mut arg = LineExecutionArgument::Empty;
         let mut current_index = line;
         let mut arg = line_execution_arg;
+        let mut iteration = 0;
         loop {
+            
+            
      //       let real_lines = &self.real_lines;//&context.real_lines.as_ref().expect("real_lines calculated");
             if current_index >= self.real_lines.len() {
                 //break;
@@ -603,6 +621,12 @@ impl GwProgram {
                     //panic!("Attempting to execute async operation in sync evaluation");
                     return EvalFragmentAsyncResult::ReadLine(current_index);
                 }                
+            }
+
+            if iteration == MAX_ITERATIONS_WITHOUT_REFRESH {
+                return EvalFragmentAsyncResult::YieldToLine(current_index, arg);
+            } else {
+                iteration += 1;
             }
         }
     }

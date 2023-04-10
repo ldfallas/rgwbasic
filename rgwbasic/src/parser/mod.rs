@@ -87,7 +87,8 @@ pub enum GwToken {
 fn consume_whitespace<'a>(iterator : &mut PushbackCharsIterator<'a>) {
     loop {
         if let Some(c) = iterator.next() {
-            if c != ' ' {
+            //if !(c == ' ' || c == '\r' || c == '\t' || c == '\n') {
+            if !c.is_whitespace() {
                 iterator.push_back(c);
                 break;
             }

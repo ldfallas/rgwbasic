@@ -34,6 +34,8 @@ impl GwInstruction for GwFor {
              arg: LineExecutionArgument,
              context: &mut EvaluationContext,
              program: &mut GwProgram) -> InstructionResult {
+        //context.console.log(format!(">>> {:?}", arg).as_str());
+
         let mut next_line : i16 = 0;
         if let Some(corresponding_next) = context.pair_instruction_table.get(&line) {
             next_line = *corresponding_next;

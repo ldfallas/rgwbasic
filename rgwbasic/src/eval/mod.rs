@@ -517,23 +517,59 @@ impl GwInstruction for GwLoadStat {
     fn eval(
         &self,
         _line: i16,
-        _arg: LineExecutionArgument,        
+        arg: LineExecutionArgument,        
         context: &mut EvaluationContext,
         program: &mut GwProgram
     ) -> InstructionResult {
+        context.console.log(" load call ");
+        if let  LineExecutionArgument::SupplyPendingResult(code)= arg {
+            context.console.log("about to load delayed");
+            context.console.log(&code);
+            let lines_vec:Vec<String> = code.split("\n").map(String::from).filter(|s| { s.len() != 0}).collect();
+            for s in (&lines_vec).into_iter() {
+                context.console.log("___");
+                context.console.log(&s);
+            }
+            let c = &mut context.console;
+                    let lines = Box::new(lines_vec.into_iter());
+                    match program.load_from("fix.bas", c,  lines) {
+                        Ok(_) => {
+                            context.console.log(">>1");
+                            println!("File loaded");
+                        }
+                        Err(error) => {
+                            context.console.log(">>2");
+                            panic!("Error loading file {:?}", error);
+                        }
+                    }
+            context.console.log("end load");
+                    return InstructionResult::EvaluateNext;
+            
+        }
         let result = self.filename.eval(context);
 
         return match result {
             Ok(ExpressionEvalResult::StringResult(filename)) => {
-                match program.load_from(&filename.trim_matches('"'), &context.console) {
-                    Ok(_) => {
-                        println!("File loaded");
-                    }
-                    Err(error) => {
-                        panic!("Error loading file {:?}", error);
-                    }
+                context.console.log("async load 1");
+                if  !(&context.console).requires_async_readline() {
+                    context.console.log("async load X");
+                    let file_name_to_use = &filename.trim_matches('"');
+                    let lines = context.console.read_file_lines(file_name_to_use);
+                    let c = &mut context.console;
+                    match program.load_from(&file_name_to_use, c, lines) {
+                        Ok(_) => {
+                            println!("File loaded");
+                        }
+                        Err(error) => {
+                            panic!("Error loading file {:?}", error);
+                        }
+                    }                
+                    InstructionResult::EvaluateNext
+                } else {
+                    context.console.log("async load 2");
+                    InstructionResult::RequestAsyncAction(
+                        AsyncAction::LoadProgram(String::from(filename)))
                 }
-                InstructionResult::EvaluateNext
             }
             Ok(_) => {
                 InstructionResult::EvaluateToError("Type mismatch".to_string())
