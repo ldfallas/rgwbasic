@@ -532,7 +532,7 @@ impl GwInstruction for GwLoadStat {
             }
             let c = &mut context.console;
                     let lines = Box::new(lines_vec.into_iter());
-                    match program.load_from("fix.bas", c,  lines) {
+                    match program.load_from(/*"fix.bas",*/ c,  lines) {
                         Ok(_) => {
                             context.console.log(">>1");
                             println!("File loaded");
@@ -556,7 +556,7 @@ impl GwInstruction for GwLoadStat {
                     let file_name_to_use = &filename.trim_matches('"');
                     let lines = context.console.read_file_lines(file_name_to_use);
                     let c = &mut context.console;
-                    match program.load_from(&file_name_to_use, c, lines) {
+                    match program.load_from(/*&file_name_to_use,*/ c, lines) {
                         Ok(_) => {
                             println!("File loaded");
                         }
@@ -614,7 +614,7 @@ impl GwInstruction for GwSystemStat {
         _line: i16,
         _arg: LineExecutionArgument,
         context: &mut EvaluationContext,
-        program: &mut GwProgram
+        _program: &mut GwProgram
     ) -> InstructionResult {
         context.console.exit_program();
         InstructionResult::EvaluateNext
@@ -635,7 +635,7 @@ impl GwInstruction for GwRem {
         _line: i16,
         _arg: LineExecutionArgument,
         _context: &mut EvaluationContext,
-        program: &mut GwProgram
+        _program: &mut GwProgram
     ) -> InstructionResult {
         InstructionResult::EvaluateNext
     }
@@ -654,7 +654,7 @@ impl GwInstruction for GwCls {
         _line: i16,
         _arg: LineExecutionArgument,
         _context: &mut EvaluationContext,
-        program: &mut GwProgram
+        _program: &mut GwProgram
     ) -> InstructionResult {
         InstructionResult::EvaluateNext
     }
@@ -675,7 +675,7 @@ impl GwInstruction for GwAssign {
         _line: i16,
         _arg: LineExecutionArgument,
         context: &mut EvaluationContext,
-        program: &mut GwProgram
+        _program: &mut GwProgram
     ) -> InstructionResult {
 
         //let expression_evaluation = ;
@@ -715,7 +715,7 @@ impl GwInstruction for GwArrayAssign {
         _line: i16,
         _arg: LineExecutionArgument,
         context: &mut EvaluationContext,
-        program: &mut GwProgram
+        _program: &mut GwProgram
     ) -> InstructionResult {
         let mut evaluated_arguments: Vec<usize> =
                    Vec::with_capacity(self.indices_expressions.len());
@@ -767,7 +767,7 @@ impl GwInstruction for GwGotoStat {
         _line: i16,
         _arg: LineExecutionArgument,
         context: &mut EvaluationContext,
-        program: &mut GwProgram
+        _program: &mut GwProgram
     ) -> InstructionResult {
         if let Some(actual_line) = context.get_real_line(self.line) {
             return InstructionResult::EvaluateLine(actual_line);
@@ -797,7 +797,7 @@ impl GwInstruction for GwKeyStat {
         _line: i16,
         _arg: LineExecutionArgument,
         _context: &mut EvaluationContext,
-        program: &mut GwProgram
+        _program: &mut GwProgram
     ) -> InstructionResult {
         InstructionResult::EvaluateNext
     }
@@ -822,7 +822,7 @@ impl GwInstruction for GwColor {
         _line: i16,
         _arg: LineExecutionArgument,
         _context: &mut EvaluationContext,
-        program: &mut GwProgram
+        _program: &mut GwProgram
     ) -> InstructionResult {
         InstructionResult::EvaluateNext
     }
@@ -857,7 +857,7 @@ impl GwInstruction for GwPrintStat {
         _line: i16,
         _arg: LineExecutionArgument,
         context: &mut EvaluationContext,
-        program: &mut GwProgram
+        _program: &mut GwProgram
     ) -> InstructionResult {
         let mut i = 0;
         let mut newline_at_the_end = true;
@@ -935,12 +935,23 @@ fn read_variable_from_input(
 ) -> Result<(), String> {
     match variable.get_type(context) {
         ExpressionType::Double => {
-            let dbl = str_value.trim_end().parse::<f64>().unwrap();
+            let dbl = str_value
+                .trim_end()
+                .parse::<f64>()
+                .map_err(|_| { "Invalid value".to_string() })?;
             variable.assign_value(ExpressionEvalResult::DoubleResult(dbl), context)
         }
         ExpressionType::Single => {
-            let svl = str_value.trim_end().parse::<f32>().unwrap();
+            let svl = str_value
+                .trim_end()
+                .parse::<f32>()
+                .map_err(|_| { "Invalid value".to_string() })?;
             variable.assign_value(ExpressionEvalResult::SingleResult(svl), context)
+        }
+        ExpressionType::String => {
+            variable.assign_value(
+                ExpressionEvalResult::StringResult(str_value.to_string()),
+                context)
         }
         _ => panic!("Not implemented INPUT for this type"),
     }
@@ -952,14 +963,13 @@ impl GwInstruction for GwInputStat {
         _line: i16,
         arg: LineExecutionArgument,
         context: &mut EvaluationContext,
-        program: &mut GwProgram
+        _program: &mut GwProgram
     ) -> InstructionResult {
 
         if let LineExecutionArgument::SupplyPendingResult(ref line) = arg {
-            read_variable_from_input(&self.variables[0], context, line);
+            let _ = read_variable_from_input(&self.variables[0], context, line);
             return InstructionResult::EvaluateNext;
         }
-
         
         let mut buffer = String::new();
         let mut pr = "?";

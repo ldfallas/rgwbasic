@@ -36,7 +36,7 @@ impl GwInstruction for GwIf {
         _line: i16,
         _arg: LineExecutionArgument,
         context: &mut EvaluationContext,
-        program: &mut GwProgram,
+        _program: &mut GwProgram,
     ) -> InstructionResult {
         match self.condition.eval(context) {
             Ok(eval_result) if is_false_result(&eval_result) => {

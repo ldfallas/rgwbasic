@@ -5,7 +5,7 @@ use crate::parser::parse_instruction_line_from_string;
 use crate::parser::ParserResult;
 use super::GwExpression;
 
-const MAX_ITERATIONS_WITHOUT_REFRESH: u32 = 30;
+const MAX_ITERATIONS_WITHOUT_REFRESH: u32 = 1030;
 
 #[derive(Debug, Clone)]
 pub enum LineExecutionArgument {
@@ -161,7 +161,7 @@ impl EvaluationContext/*<'_>*/  {
             current_real_line: -1,
         }
     }
-    pub fn with_program(program : &mut GwProgram, console: Box<dyn Console>) -> EvaluationContext {
+    pub fn with_program(_program: &mut GwProgram, console: Box<dyn Console>) -> EvaluationContext {
         EvaluationContext {
             variables : HashMap::new(),
             jump_table : HashMap::new(),
@@ -239,12 +239,21 @@ impl EvaluationContext/*<'_>*/  {
         }
     }
 
-    pub fn get_variable_type(&self, name : &String) -> Option<ExpressionType> {
+    pub fn get_variable_type(&self, name : &String)
+                             -> Option<ExpressionType> {
         match self.lookup_variable(name) {
             Some(ExpressionEvalResult::StringResult(_)) => Some(ExpressionType::String),
             Some(ExpressionEvalResult::IntegerResult(_)) => Some(ExpressionType::Integer),
             Some(ExpressionEvalResult::SingleResult(_)) => Some(ExpressionType::Single),
             Some(ExpressionEvalResult::DoubleResult(_)) => Some(ExpressionType::Double),
+            _ => Self::get_type_from_name(name)
+        }
+    }
+
+    fn get_type_from_name(name: &String)
+                          -> Option<ExpressionType> {
+        match name.chars().last() {
+            Some('$') => Some(ExpressionType::String),
             _ => None
         }
     }
@@ -401,7 +410,7 @@ impl GwProgram {
     }
 
     pub fn load_from(&mut self,
-                     file_name: &str,
+                     //file_name: &str,
                      console: &mut Box<dyn Console>,
                      file_lines: Box<dyn Iterator<Item = String>>)
                 -> Result<(), & 'static str> {
@@ -417,12 +426,12 @@ impl GwProgram {
                 ParserResult::Success(parsed_line) => {
                     console.log("adding line");
                     self.add_line(parsed_line);},
-                ParserResult::Error(error) => {/*return Err(format!("Line {} Error: {}", line_number, error)); */
+                ParserResult::Error(_) => {/*return Err(format!("Line {} Error: {}", line_number, error)); */
 
                  console.log("aaa");
                 return Err("Parsing error");},
                 ParserResult::Nothing=> {console.log("nothing");} //println!("Nothing")}
-                _ => { console.log("last"); }
+               // _ => { console.log("last"); }
             }
             line_number = line_number + 1;
         }
@@ -437,10 +446,9 @@ impl GwProgram {
         }
     }
 
-
-
     pub fn prepare_context(&mut self, console: &Box<dyn Console>) -> EvaluationContext {
         let real_lines = &mut self.real_lines;// &mut vec![];
+        real_lines.clear();
         let mut global_data = vec![];
         let mut table = HashMap::new();
         let mut i = 0;
@@ -498,54 +506,54 @@ impl GwProgram {
         }, context)
     }
 
-    pub fn step(&mut self,
-                step_execution: &StepExecutionInfo,
-                execution_context: &mut EvaluationContext) -> StepExecutionInfo {
-        let mut context = /*step_execution.*/execution_context;
-        let real_lines = &self.real_lines; //&context.real_lines.as_ref().expect("real_lines calculated");
-        let mut arg = &LineExecutionArgument::Empty;
-        let mut finish_execution = false;
-        match &step_execution.last_step_result {
-            InstructionResult::EvaluateNext => {
-                context.current_real_line += 1;
-            }
-            InstructionResult::EvaluateLine(new_line) => {
-                context.current_real_line = usize::try_from(*new_line).unwrap() as i32;
-            }
-            InstructionResult::EvaluateLineWithArg(new_line, result_arg) => {
-                arg = result_arg;
-                context.current_real_line = usize::try_from(*new_line).unwrap() as i32;
-            }
-            InstructionResult::EvaluateEnd => {
-                finish_execution = true;
-            },
-            InstructionResult::EvaluateToError(error_message) => {
-                context.console.print("RUNTIME ERROR: ");
-                context.console.print_line(error_message.as_str());
-                finish_execution = true;
-            },
-            InstructionResult::RequestAsyncAction(AsyncAction::ReadLine) => {
-                context.console.print("Read line");
-            }
-            InstructionResult::RequestAsyncAction(AsyncAction::LoadProgram(_)) => {
-                context.console.print("LP");
-            }            
-        }
+    // pub fn step(&mut self,
+    //             step_execution: &StepExecutionInfo,
+    //             execution_context: &mut EvaluationContext) -> StepExecutionInfo {
+    //     let mut context = /*step_execution.*/execution_context;
+    //     let real_lines = &self.real_lines; //&context.real_lines.as_ref().expect("real_lines calculated");
+    //     let mut arg = &LineExecutionArgument::Empty;
+    //     let mut finish_execution = false;
+    //     match &step_execution.last_step_result {
+    //         InstructionResult::EvaluateNext => {
+    //             context.current_real_line += 1;
+    //         }
+    //         InstructionResult::EvaluateLine(new_line) => {
+    //             context.current_real_line = usize::try_from(*new_line).unwrap() as i32;
+    //         }
+    //         InstructionResult::EvaluateLineWithArg(new_line, result_arg) => {
+    //             arg = result_arg;
+    //             context.current_real_line = usize::try_from(*new_line).unwrap() as i32;
+    //         }
+    //         InstructionResult::EvaluateEnd => {
+    //             finish_execution = true;
+    //         },
+    //         InstructionResult::EvaluateToError(error_message) => {
+    //             context.console.print("RUNTIME ERROR: ");
+    //             context.console.print_line(error_message.as_str());
+    //             finish_execution = true;
+    //         },
+    //         InstructionResult::RequestAsyncAction(AsyncAction::ReadLine) => {
+    //             context.console.print("Read line");
+    //         }
+    //         InstructionResult::RequestAsyncAction(AsyncAction::LoadProgram(_)) => {
+    //             context.console.print("LP");
+    //         }            
+    //     }
 
-        let line = &real_lines[context.current_real_line as usize].clone();
-        let new_eval_result =
-            line.eval(
-                0,
-                LineExecutionArgument::Empty,
-                &mut context,
-                self);
+    //     let line = &real_lines[context.current_real_line as usize].clone();
+    //     let new_eval_result =
+    //         line.eval(
+    //             0,
+    //             LineExecutionArgument::Empty,
+    //             &mut context,
+    //             self);
 
-        StepExecutionInfo {
-            //execution_context: context,
-            last_step_result: new_eval_result
-        }
+    //     StepExecutionInfo {
+    //         //execution_context: context,
+    //         last_step_result: new_eval_result
+    //     }
         
-    }
+    // }
 
     pub fn run(&mut self, console: &Box<dyn Console>) {
         let mut context = self.prepare_context(console);

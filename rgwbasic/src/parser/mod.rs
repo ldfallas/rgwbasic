@@ -1640,22 +1640,22 @@ pub fn parse_instruction_line<'a>(iterator : &mut PushbackTokensIterator<'a>)
             if let ParserResult::Success(instr) = parse_result {
                 match continue_parse_same_line_instruction_sequence(iterator) {
                  ParserResult::Success(rest_inst) => {
-                    return ParserResult::Success(
+                     ParserResult::Success(
                         ProgramLine {
                             line : line_number,
-                            instruction : instr.into(),
+                            instruction : instr,
                             rest_instructions : Some(rest_inst)
                         }
-                    );
+                    )
                  },
                  ParserResult::Nothing => {
-                    return ParserResult::Success(
+                     ParserResult::Success(
                         ProgramLine {
-                            line : line_number,
-                            instruction : instr.into(),
+                            line: line_number,
+                            instruction: instr,
                             rest_instructions : None
                         }
-                    );
+                    )
                  },
                  ParserResult::Error(err) =>
                        ParserResult::Error(err)

@@ -199,19 +199,28 @@ impl GwInterpreterWrapper {
 }
 
 
-
-
 struct HtmlDivConsole {
+    column_position: usize
+}
+
+impl HtmlDivConsole {
+    fn new() -> HtmlDivConsole {
+        HtmlDivConsole {
+            column_position: 0
+        }
+    }
 }
 
 impl Console for HtmlDivConsole {
     fn print(&mut self, value: &str) {
         appendElementLd(value);
+        self.column_position += value.len();
     }
 
     
     fn print_line(&mut self, value: &str) {        
         appendElementLn(value);
+        self.column_position = 0;
     }
 
     fn read_line(&mut self, buffer: &mut String) {
@@ -224,7 +233,7 @@ impl Console for HtmlDivConsole {
     }
 
     fn current_text_column(&self) -> usize {
-        todo!()
+       self.column_position
     }
 
     fn read_file_lines(&self, file_name: &str) -> Box<dyn Iterator<Item=String>> {
@@ -243,7 +252,7 @@ impl Console for HtmlDivConsole {
 
     fn clone(&self) -> Box<dyn Console> {
 
-        Box::new(HtmlDivConsole{})
+        Box::new(HtmlDivConsole::new())
 
     }
     fn log(&self, msg: &str) {
@@ -284,7 +293,7 @@ impl GwWsmInterpreter {
         log("1>start");
         GwWsmInterpreter {
             program: eval::GwProgram::new(),
-            console: Box::new(HtmlDivConsole {}),
+            console: Box::new(HtmlDivConsole::new()),
             current_execution_context: None,
             current_step: None
 //            last_step_info: None
@@ -295,14 +304,14 @@ impl GwWsmInterpreter {
         self.current_step = Some(self.run_program_async());
     }
 
-    pub fn step_current_program(&mut self) {
-        // Notice here the use of `take`
-        let mut moved = self.current_step.take().unwrap();
-        self.current_step = Some(self.step_program(&mut moved));
-    }
+    // pub fn step_current_program(&mut self) {
+    //     // Notice here the use of `take`
+    //     let mut moved = self.current_step.take().unwrap();
+    //     self.current_step = Some(self.step_program(&mut moved));
+    // }
 
     fn run_program_async(&mut self) -> WsStepExecutionInfo {
-        let console: Box<dyn Console> = Box::new(HtmlDivConsole{});
+        let console: Box<dyn Console> = Box::new(HtmlDivConsole::new());
         let (first_result, ctx) =
             self.program.start_step_execution(&console);
         self.current_execution_context = Some(ctx);
@@ -310,7 +319,7 @@ impl GwWsmInterpreter {
     }
 
     fn create_execution_context(&mut self) {
-        let console: Box<dyn Console> = Box::new(HtmlDivConsole{});
+        let console: Box<dyn Console> = Box::new(HtmlDivConsole::new());
 
         self.current_execution_context = Some(self.program.prepare_context(&console));
         self.current_execution_context.as_mut().unwrap().current_real_line = 0;
@@ -338,13 +347,13 @@ impl GwWsmInterpreter {
             self.current_execution_context.as_mut().unwrap())
     }
 
-    fn step_program(&mut self, last_step: &mut WsStepExecutionInfo)
-                        -> WsStepExecutionInfo {
-        let mut mut_context = self.current_execution_context.as_mut().unwrap();
-        let tmp_result =
-            self.program.step(last_step.get_inner_execution(), mut_context);
-        WsStepExecutionInfo::new(tmp_result, false)
-    }
+    // fn step_program(&mut self, last_step: &mut WsStepExecutionInfo)
+    //                     -> WsStepExecutionInfo {
+    //     let mut mut_context = self.current_execution_context.as_mut().unwrap();
+    //     let tmp_result =
+    //         self.program.step(last_step.get_inner_execution(), mut_context);
+    //     WsStepExecutionInfo::new(tmp_result, false)
+    // }
     
     pub fn eval_in_interpreter(&mut self, command: &str, evaluation_arg: Option<LineExecutionArgument>) -> Option<AsyncAction> {
 //        let mut program = eval::GwProgram::new();
@@ -365,7 +374,7 @@ impl GwWsmInterpreter {
             match parser::parse_repl_instruction_string (uline) {
                 parser::ParserResult::Success(parsed_instr) => {
                     log("about to eval instruction");
-                    let mut context = eval::EvaluationContext::with_program(&mut self.program, Box::new(HtmlDivConsole{}));
+                    let mut context = eval::EvaluationContext::with_program(&mut self.program, Box::new(HtmlDivConsole::new()));
                     log("2. eval in interpreter__");
                     let result = parsed_instr.eval(-1,
                                       eval_arg,

@@ -35,7 +35,7 @@ impl GwInstruction for GwSwap {
              _line: i16,
              _argument: LineExecutionArgument,
              context : &mut EvaluationContext,
-             program: &mut GwProgram) -> InstructionResult {
+             _program: &mut GwProgram) -> InstructionResult {
 
         match (self.left.eval(context), self.right.eval(context)) {
             (Ok(result1), Ok(result2)) => {

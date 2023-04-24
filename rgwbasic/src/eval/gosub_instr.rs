@@ -22,7 +22,7 @@ impl GwInstruction for GwGosub {
              line: i16,
              argument: LineExecutionArgument,
              context : &mut EvaluationContext,
-             program: &mut GwProgram) -> InstructionResult {
+             _program: &mut GwProgram) -> InstructionResult {
         if let LineExecutionArgument::SubReturn = argument {
             InstructionResult::EvaluateNext
         } else {
@@ -60,7 +60,7 @@ impl GwInstruction for GwReturn {
              _line: i16,
              _argument: LineExecutionArgument,
              context : &mut EvaluationContext,
-             program: &mut GwProgram) -> InstructionResult {
+             _program: &mut GwProgram) -> InstructionResult {
         if let Some(line_to_return) = context.pop_return() {
             InstructionResult::EvaluateLineWithArg(
                 line_to_return,

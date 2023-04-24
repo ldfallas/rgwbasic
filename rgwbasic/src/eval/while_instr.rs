@@ -14,7 +14,7 @@ impl GwInstruction for GwWhile {
              _arg: LineExecutionArgument,
              context : &mut EvaluationContext,
              program: &mut GwProgram) -> InstructionResult {
-        let mut wend_line : i16 = 0;
+        let wend_line: i16;
 
         // Find the cached corresponding line for this WHILE statement
         if let Some(corresponding_wend) =  context.pair_instruction_table.get(&line) {
@@ -85,7 +85,7 @@ impl GwInstruction for GwWend {
              line: i16,
              _arg: LineExecutionArgument,
              context : &mut EvaluationContext,
-             program: &mut GwProgram) -> InstructionResult{
+             _program: &mut GwProgram) -> InstructionResult{
         if let Some(corresponding_while) =  context.pair_instruction_table.get(&line) {
             InstructionResult::EvaluateLine(*corresponding_while)
         } else {

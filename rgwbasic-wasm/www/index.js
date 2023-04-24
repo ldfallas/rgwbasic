@@ -1,6 +1,5 @@
 import * as wasm from "rgwbasic-wasm";
 
-
 window.appendElementLd = function(uline) {
 /*    var e = document.getElementById("root");
     var newDiv = document.createElement('div');
@@ -26,7 +25,6 @@ var interpreter = wasm.GwInterpreterWrapper.new(); //wasm.GwWsmInterpreter.new()
 //interpreter.start_interpreter();
 
 window.interpreter = interpreter;
-
 
 setTimeout( () => {
     var state = { lineTxt:'',

@@ -62,7 +62,7 @@ impl GwInstruction for GwDim {
              _line: i16,
              _arg: LineExecutionArgument,
             context : &mut EvaluationContext,
-            program: &mut GwProgram) -> InstructionResult {
+            _program: &mut GwProgram) -> InstructionResult {
         if let Err(e) = self.declaration.perform_declaration(context) {
             return InstructionResult::EvaluateToError(e);
         }

@@ -84,7 +84,7 @@ impl GwInstruction for GwPrintUsingStat {
              _line: i16,
              _arg: LineExecutionArgument,
              context: &mut EvaluationContext,
-             program: &mut GwProgram) -> InstructionResult {
+             _program: &mut GwProgram) -> InstructionResult {
         if let Some((PrintElementWrapper::Expr(expr), _)) = self.expressions.get(0) {
             if let Ok(ExpressionEvalResult::StringResult(a_atr)) = expr.eval(context) {
                 let format_string = &a_atr.as_str();

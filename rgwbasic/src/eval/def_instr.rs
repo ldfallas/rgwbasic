@@ -27,7 +27,7 @@ impl GwInstruction for GwDefType {
              _line: i16,
              _arg: LineExecutionArgument,
              context : &mut EvaluationContext,
-             program: &mut GwProgram) -> InstructionResult{
+             _program: &mut GwProgram) -> InstructionResult{
 
         for range in &self.ranges {
             set_range_type(&range, &self.definition_type, context);

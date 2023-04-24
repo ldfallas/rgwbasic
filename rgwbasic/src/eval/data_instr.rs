@@ -27,7 +27,7 @@ impl GwInstruction for GwData {
              _line: i16,
              _argument: LineExecutionArgument,
              _context : &mut super::EvaluationContext,
-             program: &mut GwProgram) -> InstructionResult {
+             _program: &mut GwProgram) -> InstructionResult {
         InstructionResult::EvaluateNext
     }
 
