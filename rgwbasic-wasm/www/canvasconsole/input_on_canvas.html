@@ -1,0 +1,60 @@
+<html>
+   <body>
+      <div id="container" style='position:absolute'>
+      <canvas id='theCanvas' 
+              width='400'
+              height='400'
+              tabindex='-1'
+              >
+      </canvas>
+      </div>
+      <!--
+      <div>
+         <span>Current key:</span><span id="cc"></span>
+      </div>
+      -->
+   <script src="input_on_canvas.js"></script>
+   <!--
+   <script type='text/javascript'>
+      window.addEventListener('load', () => { 
+         let manager = new ConsoleManager(
+                             document.getElementById('theCanvas'),
+                             document.getElementById('container'));
+         let counter = 20;
+         let loopFunc = (line) =>{
+              if (line === 'clear') {
+                  manager.clear();
+              }
+              if (line === 'printsample') {
+		  manager.printline('un ejemplo');
+	       }
+              if (line === 'print') {
+		  manager.print('un ejemplo');
+		  manager.print(' parcial');
+		  manager.print(' fin');
+	       }
+              if (line == "sequence") {
+                 for(let i = 0; i < 100;i++) {
+                     manager.printline(i.toString());
+                 }
+              }
+             manager.readTextLine().then(loopFunc);
+         };
+         manager.readTextLine().then(loopFunc);
+
+         function loop() {
+             //document.getElementById('cc').innerHTML = manager.keyboardManager.currentKey;
+
+             if (counter > 0) {
+               //manager.printLine(counter.toString());
+               counter--;
+             }
+             requestAnimationFrame(loop);
+         }
+         requestAnimationFrame(loop);
+      });
+   </script>
+   -->
+
+   </body>
+   </html>
