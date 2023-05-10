@@ -21,6 +21,7 @@ use crate::eval::print_using::GwPrintUsingStat;
 use crate::eval::GwLoadStat;
 use crate::eval::GwInputStat;
 use crate::eval::GwCls;
+use crate::eval::end_instr::GwEnd;
 use crate::eval::if_instr::{ GwIf, GwIfWithStats };
 use crate::eval::GwKeyStat;
 use crate::eval::GwColor;
@@ -35,7 +36,7 @@ use crate::eval::dim_instr::{ GwDim, GwDimDecl };
 use crate::eval::def_instr::{GwDefType, DefVarRange};
 use crate::eval::swap_instr::{ GwSwap };
 use crate::eval::gosub_instr::{ GwGosub, GwReturn };
-use crate::eval::{GwAbs, GwLog, GwInt, GwCos, GwSin};
+use crate::eval::{GwAbs, GwLog, GwInt, GwCos, GwSin, GwRnd};
 use crate::eval::ProgramLine;
 use crate::eval::GwRem;
 use crate::eval::GwParenthesizedExpr;
@@ -392,6 +393,7 @@ fn is_builtin_function(func_name: &String) -> bool {
         "INT" => true,
         "COS" => true,
         "SIN" => true,
+        "RND" => true,
         _ => false
     }
 }
@@ -404,6 +406,7 @@ fn create_builtin_function(func_name: &String, args: Vec<Box<dyn GwExpression>>)
         "INT" if mut_args.len() == 1 => Some(Box::new(GwInt { expr: mut_args.remove(0) })),
         "COS" if mut_args.len() == 1 => Some(Box::new(GwCos { expr: mut_args.remove(0) })),
         "SIN" if mut_args.len() == 1 => Some(Box::new(GwSin { expr: mut_args.remove(0) })),
+        "RND" if mut_args.len() == 1 => Some(Box::new(GwRnd { expr: mut_args.remove(0) })),
         _ => None
     }
 }
@@ -1101,9 +1104,10 @@ fn parse_input_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
     parse_seq![
 	iterator,
 	{
-	opt_token(GwToken::String(prompt_txt), prompt = prompt_txt);
-	opt_token(GwToken::Keyword(tokens::GwBasicToken::CommaSeparatorTok), _x = 1);
-	parse_success(input_vars, parse_with_separator(iterator,
+            opt_token(GwToken::String(prompt_txt), prompt = prompt_txt);
+	    opt_token(GwToken::Keyword(tokens::GwBasicToken::CommaSeparatorTok), _x = 1);
+            opt_token(GwToken::Keyword(tokens::GwBasicToken::SemiColonSeparatorTok), _x = 1);
+	    parse_success(input_vars, parse_with_separator(iterator,
 				                       parse_restrict_identifier_expression,
 						       tokens::GwBasicToken::CommaSeparatorTok));
 	},
@@ -1266,7 +1270,14 @@ fn parse_cls_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
     return ParserResult::Success(Rc::new(
         GwCls {}
         ));
-}
+} 
+
+fn parse_end_stat<'a>(_iterator: &mut PushbackTokensIterator<'a>)
+                      -> ParserResult<Rc<dyn GwInstruction>> {
+    return ParserResult::Success(Rc::new(
+        GwEnd {}
+        ));
+} 
 
 fn parse_key_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
                       -> ParserResult<Rc<dyn GwInstruction>> {
@@ -1503,6 +1514,7 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
         match next_tok {
             GwToken::Keyword(tokens::GwBasicToken::GotoTok) => parse_goto_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::ClsTok) => parse_cls_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::EndTok) => parse_end_stat(iterator),            
             GwToken::Keyword(tokens::GwBasicToken::RemTok) => parse_rem_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::DefdblTok) => parse_deftype_stat(iterator, ExpressionType::Double),
             GwToken::Keyword(tokens::GwBasicToken::DefstrTok) => parse_deftype_stat(iterator, ExpressionType::String),

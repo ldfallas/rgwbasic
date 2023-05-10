@@ -1,9 +1,12 @@
+use rand::Rng;
+
 pub mod binary;
 pub mod context;
 pub mod def_instr;
 pub mod dim_instr;
 pub mod for_instr;
 pub mod if_instr;
+pub mod end_instr;
 pub mod print_using;
 pub mod while_instr;
 
@@ -251,6 +254,23 @@ impl GwExpression for GwSin {
     }
     fn fill_structure_string(&self, buffer: &mut String) {
         buffer.push_str("SIN(");
+        self.expr.fill_structure_string(buffer);
+        buffer.push(')')
+    }
+}
+
+pub struct GwRnd {
+    pub expr: Box<dyn GwExpression>,
+}
+
+impl GwExpression for GwRnd {
+    fn eval(&self, _context: &mut EvaluationContext)
+            -> Result<ExpressionEvalResult, EvaluationError> {
+        Ok(ExpressionEvalResult::DoubleResult(rand::thread_rng().gen::<f64>()))
+    }
+
+    fn fill_structure_string(&self, buffer: &mut String) {
+        buffer.push_str("RND(");
         self.expr.fill_structure_string(buffer);
         buffer.push(')')
     }
