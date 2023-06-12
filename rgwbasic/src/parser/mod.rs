@@ -36,6 +36,7 @@ use crate::eval::dim_instr::{ GwDim, GwDimDecl };
 use crate::eval::def_instr::{GwDefType, DefVarRange};
 use crate::eval::swap_instr::{ GwSwap };
 use crate::eval::gosub_instr::{ GwGosub, GwReturn };
+use crate::eval::ongoto_instr::{ GwOnGoto };
 use crate::eval::{GwAbs, GwLog, GwInt, GwCos, GwSin, GwRnd};
 use crate::eval::ProgramLine;
 use crate::eval::GwRem;
@@ -446,8 +447,8 @@ fn parse_id_expression_aux<'a, T>(iterator : &mut PushbackTokensIterator<'a>,
     return IdExpressionResult::Var(GwVariableExpression::with_name(id))
 }
 
-fn parse_id_expression<'a>(iterator : &mut PushbackTokensIterator<'a>,
-                           id : String)
+fn parse_id_expression<'a>(iterator: &mut PushbackTokensIterator<'a>,
+                           id: String)
 			   -> ParserResult<Box<dyn GwExpression>> {
     match parse_id_expression_aux(iterator, id) {
 	IdExpressionResult::Var(variable) => ParserResult::Success(Box::new(variable)),
@@ -456,7 +457,6 @@ fn parse_id_expression<'a>(iterator : &mut PushbackTokensIterator<'a>,
 	IdExpressionResult::Error(err) => err
     }
 }
-
 
 fn parse_restrict_identifier_expression(iterator : &mut PushbackTokensIterator)
                                         -> ParserResult<Box<dyn GwAssignableExpression>> {
@@ -482,6 +482,17 @@ fn parse_restrict_identifier_expression(iterator : &mut PushbackTokensIterator)
 
     }
     result
+}
+
+fn parse_single_int<'a>(iterator: &mut PushbackTokensIterator<'a>)
+                        -> ParserResult<i16> {
+    if let Some(next_token) = iterator.next() {
+        if let GwToken::Integer(i_val) = next_token {
+            return ParserResult::Success(i_val);
+        }
+        iterator.push_back(next_token);
+    }
+    ParserResult::Nothing
 }
 
 pub fn parse_single_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
@@ -634,10 +645,6 @@ pub fn parse_multiplicative_expression<'a>(iterator : &mut PushbackTokensIterato
         }
     }
 }
-
-
-
-
 
 ////
 fn get_operation_kind_from_token(token : &tokens::GwBasicToken)
@@ -925,6 +932,27 @@ fn parse_read_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
                 Rc::new(
                     GwRead::new(variable_expression)))
         }
+    ];
+}
+
+fn parse_on_goto_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
+                          -> ParserResult<Rc<dyn GwInstruction>> {
+    parse_seq![
+        iterator,
+        {
+            parse_success(goto_expr, parse_expression(iterator));
+            token(GwToken::Keyword(tokens::GwBasicToken::GotoTok),
+                  "Expecting left parenthesis");
+            parse_success(cases,
+                          parse_with_separator(
+                              iterator,
+                              parse_single_int,
+                                  tokens::GwBasicToken::CommaSeparatorTok));
+        },
+        {
+            return ParserResult::Success(
+                     Rc::new(GwOnGoto::new(goto_expr, cases)))
+        }               
     ];
 }
 
@@ -1539,6 +1567,7 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
             GwToken::Keyword(tokens::GwBasicToken::ReadTok) => parse_read_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::DataTok) => parse_data_stat(iterator),            
             GwToken::Keyword(tokens::GwBasicToken::NextTok) => parse_next_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::OnTok) => parse_on_goto_stat(iterator),
 
             GwToken::Identifier(var_name) => parse_assignment(iterator, var_name),
             t => {
@@ -2287,7 +2316,24 @@ mod parser_tests {
 	}
     }
 
-        #[test]
+
+    #[test]
+    fn it_parses_on_goto_stat() -> Result<(), & 'static str> {
+	let str = "10 ON X GOTO 10,20,30";
+	let pb = PushbackCharsIterator::new(str.chars());
+	let mut tokens_iterator = PushbackTokensIterator::create(pb);
+	match parse_instruction_line(&mut tokens_iterator) {
+	    ParserResult::Success(instr) => {
+		let mut buf = String::new();
+		instr.fill_structure_string(&mut buf);
+		assert_eq!(buf, "(10 ON X GOTO 10, 20, 30)");
+                Ok(())
+	    }
+	    _ => Err("ON/GOTO not parsed!")
+	}
+    }
+    
+    #[test]
     fn it_parses_swap_stat() -> Result<(), & 'static str> {
 	let str = "10 SWAP X,Y";
 	let pb = PushbackCharsIterator::new(str.chars());

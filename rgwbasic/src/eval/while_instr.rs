@@ -105,7 +105,7 @@ mod while_eval_tests {
     use crate::eval::*;
     use crate::eval::while_instr::*;
 
-    use crate::eval::eval_tests::{ empty_program  };
+    use crate::eval::eval_tests::{ empty_program };
 
     #[test]
     fn it_iteratates_while_loop() {

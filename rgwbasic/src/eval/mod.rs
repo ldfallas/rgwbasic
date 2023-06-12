@@ -7,6 +7,7 @@ pub mod dim_instr;
 pub mod for_instr;
 pub mod if_instr;
 pub mod end_instr;
+pub mod ongoto_instr;
 pub mod print_using;
 pub mod while_instr;
 
@@ -1036,6 +1037,17 @@ impl GwInstruction for GwInputStat {
         }
     }
 }
+
+
+pub fn get_as_integer(value: &Option<&ExpressionEvalResult>) -> Result<i16, String> {
+    match value {
+        Some(ExpressionEvalResult::IntegerResult(int_value)) =>  Ok(*int_value),
+        Some(ExpressionEvalResult::SingleResult(single_value)) => Ok(*single_value as i16),
+        Some(ExpressionEvalResult::DoubleResult(double_value)) =>  Ok(*double_value as i16),
+        _ => Err("Type mismatch".to_string())
+    }
+}
+
 
 #[cfg(test)]
 mod eval_tests {
