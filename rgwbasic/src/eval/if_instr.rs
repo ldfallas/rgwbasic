@@ -1,12 +1,16 @@
 use std::rc::Rc;
 use super::{ EvaluationContext,
-             ExpressionEvalResult,
              GwExpression,
              LineExecutionArgument,
              InstructionResult,
              GwInstruction,
              GwProgram };
 
+/// AST element for `IF` with line numbers
+/// For example:
+/// ```basic
+/// IF X > 10 THEN 10
+/// ```
 pub struct GwIf {
     condition: Box<dyn GwExpression>,
     then_line: i16,
@@ -21,15 +25,6 @@ impl GwIf {
     }
 }
 
-fn is_false_result(result: &ExpressionEvalResult) -> bool {
-    match result {
-        ExpressionEvalResult::IntegerResult(i_result) if *i_result == 0 => true,
-        ExpressionEvalResult::SingleResult(s_result) if *s_result == 0.0 => true,
-        ExpressionEvalResult::DoubleResult(d_result) if *d_result == 0.0 => true,
-        _ => false
-    }
-}
-
 impl GwInstruction for GwIf {
     fn eval(
         &self,
@@ -39,7 +34,7 @@ impl GwInstruction for GwIf {
         _program: &mut GwProgram,
     ) -> InstructionResult {
         match self.condition.eval(context) {
-            Ok(eval_result) if is_false_result(&eval_result) => {
+            Ok(eval_result) if eval_result.is_false() => {
                 InstructionResult::EvaluateNext
             }
             Ok(_) => {
@@ -61,11 +56,11 @@ impl GwInstruction for GwIf {
 }
 
 
-// Definition of IF with nested statements
-// For example:
-// ```
-// IF X > 10 THEN PRINT "a" : PRINT "b"
-//
+/// AST element for `IF` with nested statements
+/// For example:
+/// ```basic
+/// IF X > 10 THEN PRINT "a" : PRINT "b"
+/// ```
 pub struct GwIfWithStats {
     condition: Box<dyn GwExpression>,
     stats: Vec<Rc<dyn GwInstruction>>
@@ -88,14 +83,18 @@ impl GwInstruction for GwIfWithStats {
              context : &mut EvaluationContext,
              program: &mut GwProgram) -> InstructionResult {
         match self.condition.eval(context) {
-            Ok(eval_result) if is_false_result(&eval_result) => {
+            Ok(eval_result) if eval_result.is_false() => {
                 InstructionResult::EvaluateNext
             }
             Ok(_) => {
+                let mut last_stat_result = InstructionResult::EvaluateNext;
                 for stat in &self.stats {
-                    stat.eval(line, LineExecutionArgument::Empty, context, program);
+                    last_stat_result = stat.eval(line,
+                                                 LineExecutionArgument::Empty,
+                                                 context,
+                                                 program);
                 }
-                InstructionResult::EvaluateNext
+                last_stat_result
             }
             Err(err) => InstructionResult::EvaluateToError(err.into())
         }
@@ -120,9 +119,11 @@ impl GwInstruction for GwIfWithStats {
 #[cfg(test)]
 mod if_stat_tests {
     use super::*;
-    use crate::eval::{GwIntegerLiteral, GwAssign};
+    use crate::eval::{GwIntegerLiteral, GwAssign, ExpressionEvalResult };
+    use crate::eval::stop_instr::GwStop;
     use crate::eval::eval_tests::{ empty_context, empty_program };
-    
+
+
     #[test]
     fn it_executes_then_stats() -> Result<(), & 'static str>{
         let mut ctx = empty_context();
@@ -141,7 +142,6 @@ mod if_stat_tests {
         let eval_result =
             if_stat.eval(0, LineExecutionArgument::Empty, &mut ctx, &mut program);
 
-
         assert!(
             match ctx.lookup_variable("x") {
                 Some(ExpressionEvalResult::SingleResult(value))  => {
@@ -156,6 +156,26 @@ mod if_stat_tests {
             _ => Err("Unexpected eval result")
         }     
     }
+
+    #[test]
+    fn it_returns_internal_instruction_result() -> Result<(), & 'static str> {
+        let mut ctx = empty_context();
+        let mut program = empty_program();
+        let if_stat = GwIfWithStats::new(
+            Box::new(GwIntegerLiteral::with_value(1)),
+            vec![ Rc::new(GwStop {}) ] // Evaluate to program stop 
+        );
+        
+        let eval_result =
+            if_stat.eval(0, LineExecutionArgument::Empty, &mut ctx, &mut program);
+
+
+        match eval_result {
+            InstructionResult::EvaluateEnd => Ok(()),
+            _ => Err("Unexpected eval result")
+        }     
+    }
+
 
     #[test]
     fn it_do_not_execute_then_stats() -> Result<(), & 'static str>{

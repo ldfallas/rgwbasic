@@ -69,6 +69,26 @@ pub enum ExpressionEvalResult {
     DoubleResult(f64)
 }
 
+impl ExpressionEvalResult {
+    pub fn is_false(&self) -> bool {
+        match self {
+            ExpressionEvalResult::IntegerResult(i_result) if *i_result == 0 => true,
+            ExpressionEvalResult::SingleResult(s_result) if *s_result == 0.0 => true,
+            ExpressionEvalResult::DoubleResult(d_result) if *d_result == 0.0 => true,
+            _ => false
+        }
+    }
+    
+    pub fn is_numeric(&self) -> bool {
+        match self {
+            ExpressionEvalResult::IntegerResult(_) => true,
+            ExpressionEvalResult::SingleResult(_) => true,
+            ExpressionEvalResult::DoubleResult(_) => true,
+            _ => false
+        }
+    }
+}
+
 pub enum ExpressionType {
     String, Integer, Single, Double
 }
@@ -197,7 +217,10 @@ impl EvaluationContext/*<'_>*/  {
     }
 
     pub fn declare_array(&mut self, name : &str, size : usize) {
-        let new_array = GwArray::new_one_dimension(size, ExpressionType::Double);
+        
+        let array_type =
+              Self::get_type_from_name(name).or(Some(ExpressionType::Double));
+        let new_array = GwArray::new_one_dimension(size, array_type.unwrap());
         self.array_variables.insert(String::from(name), new_array);
     }
 
@@ -250,7 +273,7 @@ impl EvaluationContext/*<'_>*/  {
         }
     }
 
-    fn get_type_from_name(name: &String)
+    fn get_type_from_name(name: &str)
                           -> Option<ExpressionType> {
         match name.chars().last() {
             Some('$') => Some(ExpressionType::String),
@@ -680,6 +703,7 @@ impl GwProgram {
                 }                
             }
         }
+        println!("Fi");
     }
 }
 

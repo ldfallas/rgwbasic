@@ -34,9 +34,10 @@ use crate::eval::while_instr::{ GwWhile, GwWend };
 use crate::eval::for_instr::{ GwFor, GwNext };
 use crate::eval::dim_instr::{ GwDim, GwDimDecl };
 use crate::eval::def_instr::{GwDefType, DefVarRange};
-use crate::eval::swap_instr::{ GwSwap };
+use crate::eval::swap_instr::GwSwap;
 use crate::eval::gosub_instr::{ GwGosub, GwReturn };
-use crate::eval::ongoto_instr::{ GwOnGoto };
+use crate::eval::ongoto_instr::GwOnGoto;
+use crate::eval::stop_instr::GwStop;
 use crate::eval::{GwAbs, GwLog, GwInt, GwCos, GwSin, GwRnd};
 use crate::eval::ProgramLine;
 use crate::eval::GwRem;
@@ -1127,6 +1128,12 @@ fn parse_wend_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
     return ParserResult::Success(Rc::new(GwWend{}));
 }
 
+fn parse_stop_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
+		       -> ParserResult<Rc<dyn GwInstruction>> {
+    return ParserResult::Success(Rc::new(GwStop{}));
+}
+
+
 fn parse_input_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
                         -> ParserResult<Rc<dyn GwInstruction>> {
     parse_seq![
@@ -1223,7 +1230,7 @@ fn parse_var_range_fragment<'a>(iterator : &mut PushbackTokensIterator<'a>,
                     // also no validation on that the variable has
                     // to be a single char
                     return ParserResult::Success(
-                        DefVarRange::Range(start, end.chars().nth(0).unwrap())
+                        DefVarRange::Range(start, end.chars().next().unwrap())
                     );
                 } else {
                     return ParserResult::Error(String::from("Expecting end of range "));
@@ -1240,7 +1247,7 @@ fn parse_var_range_fragment<'a>(iterator : &mut PushbackTokensIterator<'a>,
 }
 
 
-fn parse_var_range<'a>(iterator : &mut PushbackTokensIterator<'a>)
+fn parse_var_range(iterator : &mut PushbackTokensIterator)
                    -> ParserResult<DefVarRange> {
     let token_result = iterator.next();
     if let Some(tok) = token_result {
@@ -1293,12 +1300,10 @@ fn parse_rem_stat<'a>(iterator : &mut PushbackTokensIterator<'a>)
 }
 
 
-fn parse_cls_stat<'a>(_iterator : &mut PushbackTokensIterator<'a>)
+fn parse_cls_stat(_iterator : &mut PushbackTokensIterator)
                       -> ParserResult<Rc<dyn GwInstruction>> {
-    return ParserResult::Success(Rc::new(
-        GwCls {}
-        ));
-} 
+     ParserResult::Success(Rc::new(GwCls {}))
+}
 
 fn parse_end_stat<'a>(_iterator: &mut PushbackTokensIterator<'a>)
                       -> ParserResult<Rc<dyn GwInstruction>> {
@@ -1559,6 +1564,7 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
             GwToken::Keyword(tokens::GwBasicToken::InpTok)  => parse_input_stat(iterator),
 	    GwToken::Keyword(tokens::GwBasicToken::WhileTok) => parse_while_stat(iterator),
 	    GwToken::Keyword(tokens::GwBasicToken::WendTok) => parse_wend_stat(iterator),
+            GwToken::Keyword(tokens::GwBasicToken::StopTok) => parse_stop_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::ForTok) => parse_for_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::DimTok) => parse_dim_stat(iterator),
             GwToken::Keyword(tokens::GwBasicToken::SwapTok) => parse_swap_stat(iterator),

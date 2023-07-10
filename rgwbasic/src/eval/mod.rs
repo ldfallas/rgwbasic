@@ -10,6 +10,7 @@ pub mod end_instr;
 pub mod ongoto_instr;
 pub mod print_using;
 pub mod while_instr;
+pub mod stop_instr;
 
 #[macro_use]
 pub mod utils;
@@ -1049,6 +1050,7 @@ pub fn get_as_integer(value: &Option<&ExpressionEvalResult>) -> Result<i16, Stri
 }
 
 
+
 #[cfg(test)]
 mod eval_tests {
     use std::collections::HashMap;
@@ -1228,15 +1230,15 @@ mod eval_tests {
     }
 
     impl Console for DummyConsole {
-        fn print(&mut self, value: &str) {
+        fn print(&mut self, _value: &str) {
         todo!()
     }
 
-        fn print_line(&mut self, value: &str) {
+        fn print_line(&mut self, _value: &str) {
         todo!()
     }
 
-        fn read_line(&mut self, buffer: &mut String) {
+        fn read_line(&mut self, _buffer: &mut String) {
         todo!()
     }
 
@@ -1248,7 +1250,7 @@ mod eval_tests {
         todo!()
     }
 
-        fn read_file_lines(&self, file_name: &str) -> Box<dyn Iterator<Item=String>> {
+        fn read_file_lines(&self, _file_name: &str) -> Box<dyn Iterator<Item=String>> {
         todo!()
     }
 

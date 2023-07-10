@@ -148,7 +148,7 @@ fn get_as_integer(value: &Option<&ExpressionEvalResult>) -> Result<i16, String> 
 mod for_eval_tests {
     use crate::eval::*;
     use crate::eval::for_instr::*;
-    use crate::eval::eval_tests::{ DummyConsole, empty_program };
+    use crate::eval::eval_tests::{ DummyConsole };
     
     #[test]
     fn it_iteratates_for_loop() {

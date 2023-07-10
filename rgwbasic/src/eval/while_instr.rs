@@ -1,8 +1,10 @@
 use std::rc::Rc;
-use super::{GwExpression, GwInstruction,
-            InstructionResult, EvaluationContext, ExpressionEvalResult,
-            LineExecutionArgument,
-            GwProgram };
+use super::{ GwExpression,
+             GwInstruction,
+             InstructionResult,
+             EvaluationContext,
+             LineExecutionArgument,
+             GwProgram };
 
 pub struct GwWhile {
     pub condition : Box<dyn GwExpression>,
@@ -34,14 +36,17 @@ impl GwInstruction for GwWhile {
         // Evaluate the condition and move the following line
         let condition_evaluation = self.condition.eval(context);
         match condition_evaluation {
-            Ok(ExpressionEvalResult::IntegerResult(result)) if result == 0 => {
+            Ok(result) if result.is_false() => {
                 InstructionResult::EvaluateLine(wend_line + 1)
             }
-            Ok(ExpressionEvalResult::IntegerResult(_)) => {
+            
+            Ok(result) if result.is_numeric() => {
                 InstructionResult::EvaluateNext
             }
+            
             _ => {
-                InstructionResult::EvaluateToError(String::from("Type mismatch"))
+                InstructionResult::EvaluateToError(
+                    String::from(format!("Type mismatch in line: {}", context.current_real_line)))
             }
         }
     }
@@ -104,8 +109,6 @@ mod while_eval_tests {
     use crate::eval::eval_tests::DummyConsole;
     use crate::eval::*;
     use crate::eval::while_instr::*;
-
-    use crate::eval::eval_tests::{ empty_program };
 
     #[test]
     fn it_iteratates_while_loop() {
