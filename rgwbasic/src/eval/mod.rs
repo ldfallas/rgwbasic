@@ -19,7 +19,8 @@ pub mod data_instr;
 pub mod gosub_instr;
 
 pub use crate::eval::context::{
-    evaluate_to_usize, EvaluationContext, ExpressionEvalResult, ExpressionType, GwInstruction,
+    evaluate_to_usize,
+    EvaluationContext, ExpressionEvalResult, ExpressionType, GwInstruction,
     GwProgram, InstructionResult, LineExecutionArgument, ProgramLine,
     AsyncAction
 };

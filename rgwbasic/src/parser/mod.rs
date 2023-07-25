@@ -859,37 +859,54 @@ macro_rules! parse_seq {
 	token($token_pattern:pat, $error_message:expr);
 	$($tail:tt)*
     }, $action:block) => {
+        {
 	match $iterator.next() {
 	    Some($token_pattern) =>
 		parse_seq!($iterator, { $($tail)* },$action),
 
 	    _ => {  return ParserResult::Error(String::from($error_message)); }
 	}
+      }
     };
-
 
     ($iterator: expr,  {
 	opt_token($token_pattern:pat,
 		  $result_id:ident = $opt_result:expr);
 	$($tail:tt)*
     }, $action:block) => {
+        {
 	let $result_id = match $iterator.next() {
 	    Some($token_pattern) => Some($opt_result),
 	    Some(token) => {  $iterator.push_back(token); None }
 	    _ => { None }
 	};
-	parse_seq!($iterator, { $($tail)* } , $action);
+	    parse_seq!($iterator, { $($tail)* } , $action);
+        }
+    };
+
+    ($iterator: expr,  {
+	optional_parse($result_id:ident, $parse_expr:expr);
+	$($tail:tt)*
+    }, $action:block) => {
+        {
+	let $result_id = match $parse_expr {
+            ParserResult::Success(res) => Some(res),
+	    _ => None 
+	};
+	    parse_seq!($iterator, { $($tail)* } , $action);
+        }
     };
 
     // macro_rule case for parsing inner element
     ($iterator: expr, {
 	parse_success($pattern:pat, $parse_expr:expr);
 	$($tail:tt)*
-    },
+     },
      $action: block) => {
+        {
 	match $parse_expr {
 	    ParserResult::Success($pattern) =>
-		parse_seq!($iterator, {$($tail)*}, $action),
+    	       { parse_seq!($iterator, {$($tail)*}, $action) }
 	    ParserResult::Error(error) => {
 		return ParserResult::Error(error);
 	    }
@@ -897,6 +914,7 @@ macro_rules! parse_seq {
 		return ParserResult::Error(String::from("Nothing!"));
 	    }
 	}
+        }
     };
 }
 
@@ -1085,6 +1103,20 @@ fn parse_dim_decl<'a>(iterator: &mut PushbackTokensIterator<'a>)
     ]
 }
 
+fn parse_for_step(iterator: &mut PushbackTokensIterator)
+                  -> ParserResult<Box<dyn GwExpression>> {
+     parse_seq![
+         iterator,
+         {
+             token(GwToken::Keyword(tokens::GwBasicToken::StepTok), "Expecting STEP");
+             parse_success(step_expr, parse_expression(iterator));
+         },
+         {
+             ParserResult::Success(step_expr)
+         }
+     ]
+}
+
 fn parse_for_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
                       -> ParserResult<Rc<dyn GwInstruction>> {
     parse_seq![
@@ -1095,19 +1127,20 @@ fn parse_for_stat<'a>(iterator: &mut PushbackTokensIterator<'a>)
             parse_success(from, parse_expression(iterator));
             token(GwToken::Keyword(tokens::GwBasicToken::ToTok), "Expecting 'to'");
             parse_success(to_expr, parse_expression(iterator));
+
+            optional_parse(step_expr, parse_for_step(iterator));
         },
         {
-            ParserResult::Success(
+            return ParserResult::Success(
                 Rc::new(
                     GwFor {
                         variable,
                         from,
                         to: to_expr,
-                        step: None
+                        step: step_expr
                     }
-                ))
+                ));
         }
-
     ]
 }
 

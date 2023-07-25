@@ -114,6 +114,16 @@ impl ExpressionEvalResult {
 
         }
     }
+
+    pub fn as_i16(&self) -> Result<i16, String> {
+        match self {
+            ExpressionEvalResult::IntegerResult(iresult) => Ok(*iresult as i16),
+            ExpressionEvalResult::SingleResult(sresult) => Ok(*sresult as i16),
+            ExpressionEvalResult::DoubleResult(dresult) => Ok(*dresult as i16),
+            _ => Err("Type mismatch".to_string())
+
+        }
+    }
 }
 
 
