@@ -38,7 +38,8 @@ use crate::eval::swap_instr::GwSwap;
 use crate::eval::gosub_instr::{ GwGosub, GwReturn };
 use crate::eval::ongoto_instr::GwOnGoto;
 use crate::eval::stop_instr::GwStop;
-use crate::eval::{GwAbs, GwLog, GwInt, GwCos, GwSin, GwRnd};
+use crate::eval::{GwAbs, GwLog, GwInt, GwCos, GwSin, GwRnd,
+                  leftstr_func::GwLeftStr};
 use crate::eval::ProgramLine;
 use crate::eval::GwRem;
 use crate::eval::GwParenthesizedExpr;
@@ -396,6 +397,7 @@ fn is_builtin_function(func_name: &String) -> bool {
         "COS" => true,
         "SIN" => true,
         "RND" => true,
+        "LEFT$" => true,
         _ => false
     }
 }
@@ -409,6 +411,9 @@ fn create_builtin_function(func_name: &String, args: Vec<Box<dyn GwExpression>>)
         "COS" if mut_args.len() == 1 => Some(Box::new(GwCos { expr: mut_args.remove(0) })),
         "SIN" if mut_args.len() == 1 => Some(Box::new(GwSin { expr: mut_args.remove(0) })),
         "RND" if mut_args.len() == 1 => Some(Box::new(GwRnd { expr: mut_args.remove(0) })),
+        "LEFT$" if mut_args.len() == 2 => Some(Box::new(GwLeftStr::new(
+            mut_args.remove(0),
+            mut_args.remove(0)))),        
         _ => None
     }
 }
@@ -496,6 +501,51 @@ fn parse_single_int<'a>(iterator: &mut PushbackTokensIterator<'a>)
     ParserResult::Nothing
 }
 
+
+fn parse_args(iterator: &mut PushbackTokensIterator)
+	      -> Result<Vec<Box<dyn GwExpression>>, String>
+
+{
+    if let Some(next_token) = iterator.next() {
+        if let GwToken::Keyword(tokens::GwBasicToken::LparTok)  = next_token {
+            let array_indices_result =
+                parse_with_separator(iterator,
+                                     parse_expression,
+                                     tokens::GwBasicToken::CommaSeparatorTok);
+            if let ParserResult::Success(array) = array_indices_result {
+                if let Some(GwToken::Keyword(tokens::GwBasicToken::RparTok))  = iterator.next() {
+                    return Ok(array);
+                } else {
+                    return Err(String::from("Right parenthesis expected"));
+                }
+            } else {
+                return Err(String::from("Error parsing  array indices"));
+            }
+        } else {
+            iterator.push_back(next_token);
+        }
+    }
+    Err("Syntax error".to_string())
+}
+
+pub fn try_parsing_builtin_function(
+                  iterator : &mut PushbackTokensIterator,
+                  current_token: &GwToken)
+    -> Option<ParserResult<Box<dyn GwExpression>>> {
+    match current_token {
+        GwToken::Keyword(tokens::GwBasicToken::LeftDTok) => {
+            match parse_args(iterator) {
+                Ok(mut args) if args.len() == 2  => 
+                    Some(ParserResult::Success(
+                        Box::new(GwLeftStr::new(args.remove(0), args.remove(0))))),
+                Ok(_) => Some(ParserResult::Error("Syntax error".to_string())),
+                Err(err) => Some(ParserResult::Error(err)),
+            }            
+        }
+        _ => None
+    }
+}
+
 pub fn parse_single_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
                                    -> ParserResult<Box<dyn GwExpression>> {
     if let Some(next_token) = iterator.next() {
@@ -513,6 +563,8 @@ pub fn parse_single_expression<'a>(iterator : &mut PushbackTokensIterator<'a>)
             return parse_negation_expression(iterator);
         } else if let GwToken::Keyword(tokens::GwBasicToken::InkeyDTok) = next_token {
             return ParserResult::Success(Box::new(GwInkey {}));
+        } else if let Some(result) = try_parsing_builtin_function(iterator, &next_token) {
+            return result;
         } else {
             iterator.push_back(next_token);
         }
@@ -1615,18 +1667,6 @@ fn parse_instruction<'a>(iterator : &mut PushbackTokensIterator<'a>) -> ParserRe
             }
 
         }
-        /*
-        if let GwToken::Keyword(tokens::GwBasicToken::GotoTok) = next_tok {
-            return parse_goto_stat(iterator);
-        }
-        else if let GwToken::Keyword(tokens::GwBasicToken::PrintTok) = next_tok {
-            return parse_print_stat(iterator);
-        }
-        else if let GwToken::Identifier(var_name) = next_tok {
-            return parse_assignment(iterator, var_name);
-        } else {
-            panic!("Not implemented parsing for non-assigment");
-        }*/
     } else {
         return ParserResult::Nothing;
     }

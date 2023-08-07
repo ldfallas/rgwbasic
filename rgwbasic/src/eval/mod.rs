@@ -12,6 +12,9 @@ pub mod print_using;
 pub mod while_instr;
 pub mod stop_instr;
 
+// expressions
+pub mod leftstr_func;
+
 #[macro_use]
 pub mod utils;
 pub mod swap_instr;

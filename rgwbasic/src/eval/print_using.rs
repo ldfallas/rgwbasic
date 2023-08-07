@@ -143,6 +143,8 @@ pub fn format_number(
             if tmp == 0 &&  dollar {
                 target.push('$');
             }
+        } else if tmp == 0 && i == 0 {
+             target.push('0');
         } else {
             target.push(' ');
         }
@@ -316,6 +318,18 @@ mod print_using_tests {
         }
     }
 
+    #[test]
+    fn it_formats_less_than_one_num() {
+        let mut the_string = String::new();
+        format_number(0.245,
+                      false,
+                      4,
+                      false,
+                      2,
+                      &mut the_string);
+        assert_eq!("   0.24", the_string);
+    }
+    
     #[test]
     fn it_formats_simple_num() {
         let mut the_string = String::new();

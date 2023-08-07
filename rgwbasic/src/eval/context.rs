@@ -87,6 +87,13 @@ impl ExpressionEvalResult {
             _ => false
         }
     }
+
+    pub fn assume_string_value(&self) -> Result<&String, String> {
+        match self {
+            ExpressionEvalResult::StringResult(ref string) => Ok(string),
+            _ => Err(String::from("Invalid type"))
+        }
+    }
 }
 
 pub enum ExpressionType {
@@ -454,14 +461,14 @@ impl GwProgram {
         let mut line_number = 1;
         //for uline in console.read_file_lines(file_name) {
         for uline in file_lines {
-            console.print_line(format!(">> {}", uline).as_str());
+            //console.print_line(format!(">> {}", uline).as_str());
             match parse_instruction_line_from_string(uline) {
                 ParserResult::Success(parsed_line) => {
-                    console.log("adding line");
+                    //console.log("adding line");
                     self.add_line(parsed_line);},
                 ParserResult::Error(_) => {/*return Err(format!("Line {} Error: {}", line_number, error)); */
 
-                 console.log("aaa");
+                // console.log("aaa");
                 return Err("Parsing error");},
                 ParserResult::Nothing=> {console.log("nothing");} //println!("Nothing")}
                // _ => { console.log("last"); }
