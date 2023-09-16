@@ -659,9 +659,10 @@ impl GwProgram {
                     return EvalFragmentAsyncResult::EvaluationEnd;
                     
                 },
-                InstructionResult::EvaluateToError(error_message) => {
+                InstructionResult::EvaluateToError(error_message) => {                    
                     context.console.print("RUNTIME ERROR: ");
                     context.console.print_line(error_message.as_str());
+                    context.console.flush();
                     //break;
                     return EvalFragmentAsyncResult::EvaluationEnd;
                 },

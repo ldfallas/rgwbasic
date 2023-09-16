@@ -156,6 +156,16 @@ impl BinaryOperationEvaluator for EqualEvaluator {
             0.0
         }
     }
+    
+    fn perform_string_operation(&self, left: &String, right: &String)
+                                -> Result<ExpressionEvalResult, &'static str> {
+        Ok(
+            if left == right {
+                ExpressionEvalResult::SingleResult(-1.0)
+            } else {
+                ExpressionEvalResult::SingleResult(0.0)
+            })
+    }
 }
 
 

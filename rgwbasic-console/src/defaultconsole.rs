@@ -37,6 +37,12 @@ impl Console for DefaultConsole {
     fn read_line(&mut self, buffer: &mut String) {
         io::stdout().flush().expect("Success");
         io::stdin().read_line(buffer).expect("Success");
+        if buffer.ends_with('\n') {
+            buffer.pop();
+        }
+        if buffer.ends_with('\r') {
+            buffer.pop();
+        }
     }
     fn clear_screen(&mut self) {
         todo!();

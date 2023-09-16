@@ -679,9 +679,10 @@ impl GwInstruction for GwCls {
         &self,
         _line: i16,
         _arg: LineExecutionArgument,
-        _context: &mut EvaluationContext,
+        context: &mut EvaluationContext,
         _program: &mut GwProgram
     ) -> InstructionResult {
+        context.console.clear_screen();
         InstructionResult::EvaluateNext
     }
 
@@ -993,7 +994,10 @@ impl GwInstruction for GwInputStat {
     ) -> InstructionResult {
 
         if let LineExecutionArgument::SupplyPendingResult(ref line) = arg {
-            let _ = read_variable_from_input(&self.variables[0], context, line);
+            let read_result = read_variable_from_input(&self.variables[0], context, line);
+            if let Err(error_message) = read_result {
+                return InstructionResult::EvaluateToError(error_message);
+            }
             return InstructionResult::EvaluateNext;
         }
         
