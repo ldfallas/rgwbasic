@@ -1,0 +1,52 @@
+
+html {
+    width: 100%;
+    height: 100%;
+}
+
+body {
+     width: 100%; 
+     height: 100%; 
+}
+
+.mainContainer {
+    display: flex;
+    flex-direction: row;
+    background-color: yellow;
+    height: 100%;
+    width: 100%;
+}
+
+.controlsandconsole {
+    background-color: gray;
+    display:flex;
+    flex-direction: column;
+    flex-grow: 1;
+}
+
+.controls {
+    background-color: green;
+    flex-grow: 1;
+}
+.console {
+    flex-grow: 1;
+}
+
+.code {
+   flex-grow: 1;
+   font-family: mono;
+}
+
+.code textarea {
+    width: 100%;
+    height: 100%;
+}
+
+.code>div {
+    background: white;
+}
+
+.code .current-line {
+    background: red;
+}
+

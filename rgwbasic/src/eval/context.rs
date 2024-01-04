@@ -38,6 +38,7 @@ pub enum InstructionResult {
 }
 
 #[derive(Debug)]
+#[derive(Clone)]
 pub enum EvalFragmentAsyncResult {
     YieldToLine(usize, LineExecutionArgument),
     EvaluationEnd,
@@ -57,7 +58,6 @@ pub trait GwInstruction {
     fn is_next(&self) -> bool { false }
     fn get_data(&self) -> Option<&Vec<String>> { None }
 }
-
 
 #[derive(Clone)]
 #[derive(Debug)]
@@ -486,6 +486,23 @@ impl GwProgram {
         }
     }
 
+    pub fn real_vs_source_lines<F>(&self, callback: &mut F) 
+         where F: FnMut(u32,u32) -> () {
+       
+        let mut i = 0;    
+        for e in self.lines.iter() {
+            callback(i, e.get_line() as u32);
+
+            if let Some(ref rest) = e.rest_instructions {
+                for _nested in rest {
+                    callback(i, e.get_line() as u32);
+                    i += 1;
+                }
+            }
+            i += 1;
+        }
+    }
+
     pub fn prepare_context(&mut self, console: &Box<dyn Console>) -> EvaluationContext {
         let real_lines = &mut self.real_lines;// &mut vec![];
         real_lines.clear();
@@ -618,10 +635,18 @@ impl GwProgram {
     pub fn eval_fragment_async(&mut self,
                                line: usize,
                                line_execution_arg: LineExecutionArgument,
+                               number_instructions_to_evaluate: Option<u32>,
                                context: &mut EvaluationContext)
                             -> EvalFragmentAsyncResult{
 //        let mut current_index = 0;
         //        let mut arg = LineExecutionArgument::Empty;
+        let max_iterations: u32;
+        if let Some(max_num) =  number_instructions_to_evaluate {
+            max_iterations = max_num;
+        } else {
+            max_iterations = MAX_ITERATIONS_WITHOUT_REFRESH;
+        }
+        
         let mut current_index = line;
         let mut arg = line_execution_arg;
         let mut iteration = 0;
@@ -672,7 +697,7 @@ impl GwProgram {
                 }                
             }
 
-            if iteration == MAX_ITERATIONS_WITHOUT_REFRESH {
+            if iteration == (max_iterations - 1) {
                 return EvalFragmentAsyncResult::YieldToLine(current_index, arg);
             } else {
                 iteration += 1;

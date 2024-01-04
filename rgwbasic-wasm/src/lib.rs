@@ -59,8 +59,36 @@ impl GwInterpreterWrapper {
         }
     }
 
+    pub fn start_step(&self) -> Promise {
+
+        Promise::new(
+            &mut move |resolve, _reject| {
+                let func_rc = Rc::new(resolve);
+                self.interpreter.borrow_mut().start_step_program(func_rc);
+            })
+    } 
+
+    pub fn step(&self) -> Promise  {
+        Promise::new(
+            &mut move |resolve, _reject| {
+                let func_rc = Rc::new(resolve);
+                self.interpreter.borrow_mut().evaluate_step_result(func_rc);
+            })
+    }
+    
+    pub fn real_vs_source_lines(&self, f: &Function) {
+        self.interpreter.borrow_mut().real_vs_source_lines(f);
+    }
+
+    pub fn load_from_string(&mut self, code: &str) {
+        let file_lines = Box::new(code.split("\n").map(|s| s.to_string()));
+        let console = Box::new(HtmlDivConsole::new());
+        //self.intepreter.load_from(&mut console, file_lines);
+        self.interpreter.borrow_mut().load_from_string(code);
+    }
+
     pub fn eval_in_interpreter(&mut self, command: &str) {
-                utils::set_panic_hook();
+        utils::set_panic_hook();
         log("using wrapped(about)");
         let result = self.interpreter.borrow_mut().eval_in_interpreter(command, None);
         let interpreter1 = self.interpreter.clone();
@@ -252,29 +280,51 @@ impl Console for HtmlDivConsole {
 
 
 #[wasm_bindgen]
-struct WsStepExecutionInfo {
-    step_execution: StepExecutionInfo,
-    pub finish: bool
+pub struct JsCompatibleEvalFragmentAsyncResult {
+    result: EvalFragmentAsyncResult
 }
 
-impl WsStepExecutionInfo {
-    fn new(step_execution: StepExecutionInfo, finish: bool) -> WsStepExecutionInfo {
-        WsStepExecutionInfo {
-            step_execution, finish
+#[wasm_bindgen]
+impl JsCompatibleEvalFragmentAsyncResult {
+    fn new(inner_result: EvalFragmentAsyncResult) -> JsCompatibleEvalFragmentAsyncResult {
+        JsCompatibleEvalFragmentAsyncResult {
+            result: inner_result
         }
     }
 
-    fn get_inner_execution(&self) -> &StepExecutionInfo {
-        &self.step_execution
+    pub fn next_line(&self) -> usize {
+        match self.result {
+            EvalFragmentAsyncResult::YieldToLine(next_line, _) => next_line,
+            _ => 0
+        }
     }
 }
+
+// #[wasm_bindgen]
+// struct WsStepExecutionInfo {
+//     step_execution: StepExecutionInfo,
+//     pub finish: bool
+// }
+
+// impl WsStepExecutionInfo {
+//     fn new(step_execution: StepExecutionInfo, finish: bool) -> WsStepExecutionInfo {
+//         WsStepExecutionInfo {
+//             step_execution, finish
+//         }
+//     }
+
+//     fn get_inner_execution(&self) -> &StepExecutionInfo {
+//         &self.step_execution
+//     }
+// }
 
 #[wasm_bindgen]
 pub struct GwWsmInterpreter {
     program: eval::GwProgram,
     console: Box<dyn Console>,
     current_execution_context: Option<EvaluationContext>,
-    current_step:  Option<WsStepExecutionInfo>
+    //    current_step:  Option<WsStepExecutionInfo>
+    current_step:  Option<EvalFragmentAsyncResult>
 }
 
 //#[wasm_bindgen]
@@ -290,9 +340,26 @@ impl GwWsmInterpreter {
         }
     }
 
-    pub fn start_step_execution(&mut self) {
-        self.current_step = Some(self.run_program_async());
+    pub fn real_vs_source_lines(&self, f: &Function) {
+
+        self.program.real_vs_source_lines(
+            &mut |real, source| {
+                let real_js = JsValue::from(real);
+                let source_js = JsValue::from(source);
+                f.call2(&JsValue::NULL, &real_js, &source_js);
+            });
     }
+
+    pub fn load_from_string(&mut self, code: &str) {
+        let mut console: Box<dyn Console> = Box::new(HtmlDivConsole::new());
+        let lines: Vec<String> = code.split("\n").map(|s| s.to_string()).collect();
+        let file_lines = Box::new(lines.into_iter());
+        self.program.load_from(&mut console, file_lines);
+    }
+
+    // pub fn start_step_execution(&mut self) {
+    //     self.current_step = Some(self.run_program_async());
+    // }
 
     // pub fn step_current_program(&mut self) {
     //     // Notice here the use of `take`
@@ -300,13 +367,13 @@ impl GwWsmInterpreter {
     //     self.current_step = Some(self.step_program(&mut moved));
     // }
 
-    fn run_program_async(&mut self) -> WsStepExecutionInfo {
-        let console: Box<dyn Console> = Box::new(HtmlDivConsole::new());
-        let (first_result, ctx) =
-            self.program.start_step_execution(&console);
-        self.current_execution_context = Some(ctx);
-        WsStepExecutionInfo::new(first_result, false)
-    }
+    // fn run_program_async(&mut self) -> WsStepExecutionInfo {
+    //     let console: Box<dyn Console> = Box::new(HtmlDivConsole::new());
+    //     let (first_result, ctx) =
+    //         self.program.start_step_execution(&console);
+    //     self.current_execution_context = Some(ctx);
+    //     WsStepExecutionInfo::new(first_result, false)
+    // }
 
     fn create_execution_context(&mut self) {
         let console: Box<dyn Console> = Box::new(HtmlDivConsole::new());
@@ -334,9 +401,75 @@ impl GwWsmInterpreter {
         self.program.eval_fragment_async(
             line,
             arg,
+            None,
             self.current_execution_context.as_mut().unwrap())
     }
 
+
+    pub fn start_step_program(&mut self, resolve: Rc<Function>) {
+        self.create_execution_context();
+        self.current_step = Some(EvalFragmentAsyncResult::YieldToLine(0, LineExecutionArgument::Empty));
+//        self.step_program_async();
+        self.evaluate_step_result(resolve);
+    }
+    // pub fn step_program_async(&mut self)  {
+    //     let result = self.program.eval_fragment_async(
+    //         line,
+    //         arg,
+    //         Some(1),
+    //         self.current_execution_context.as_mut().unwrap());
+    //     self.current_step = Some(result.clone());
+    //     JsCompatibleEvalFragmentAsyncResult::new(result)
+    // }
+
+    fn evaluate_step_result(
+        &mut self,
+        resolve: Rc<Function>) {
+        match &self.current_step {
+            Some(EvalFragmentAsyncResult::EvaluationEnd) => {
+                log("Ending program execution");
+                let _  = resolve.call0(&JsValue::NULL);
+//                let _ = f.take();
+            }
+            Some(EvalFragmentAsyncResult::YieldToLine(line_to_continue, execution_arg)) => {
+                let result = self.program.eval_fragment_async(
+                    *line_to_continue,
+                    execution_arg.clone(),
+                    Some(1),
+                    self.current_execution_context.as_mut().unwrap());
+                self.current_step = Some(result.clone());
+                let mut resolved = JsValue::NULL;
+                if let EvalFragmentAsyncResult::YieldToLine(line_to_continue, _) = result {
+                    resolved = JsValue::from_f64(line_to_continue as f64);
+                }
+                let _  = resolve.call1(&JsValue::NULL, &resolved);
+                
+            }
+            Some(EvalFragmentAsyncResult::ReadLine(line_to_continue)) => {
+                // let f2 = Rc::new(RefCell::new(None));
+                // let g2 = f2.clone();                    
+                // let interpreter_new = interpreter.clone();
+                // *g2.borrow_mut() = Some(Closure::new(move |result: String| {
+                //     //alert(result.as_str());
+                //     let _ = f2.take();
+                //     let new_result = interpreter_new.borrow_mut().continue_async_fragment(
+                //         line_to_continue,
+                //         LineExecutionArgument::SupplyPendingResult(result));
+                //     //browser_request_animation_frame(nf.borrow().as_ref().unwrap());
+                //     GwInterpreterWrapper::evaluate_async_fragmen_result(new_result, interpreter_new.clone(), resolve.clone());
+                // }));
+                // readLine(g2.borrow().as_ref().unwrap());
+                let _  = resolve.call0(&JsValue::NULL);
+            }
+            the_result => {
+                log(format!("ABOUT TO PANIC! Unimplemented async result: {:?}", the_result).as_str());
+                todo!("Not implemented async result");
+                //browser_request_animation_frame(f.borrow().as_ref().unwrap());
+            }
+        }
+    }
+    
+    
     // fn step_program(&mut self, last_step: &mut WsStepExecutionInfo)
     //                     -> WsStepExecutionInfo {
     //     let mut mut_context = self.current_execution_context.as_mut().unwrap();
